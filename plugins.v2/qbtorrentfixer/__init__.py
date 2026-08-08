@@ -151,6 +151,41 @@ class QbTorrentFixer(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
+                                "props": {"cols": 12, "md": 3},
+                                "content": [
+                                    {
+                                        "component": "VBtn",
+                                        "props": {
+                                            "color": "primary",
+                                            "variant": "tonal",
+                                            "onclick": "qbtorrentfixer_run",
+                                            "text": "立即运行一次",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 9},
+                                "content": [
+                                    {
+                                        "component": "VAlert",
+                                        "props": {
+                                            "type": "warning",
+                                            "variant": "tonal",
+                                            "text": "「立即运行一次」将按当前配置（含「仅通知不处理」开关）"
+                                                    "手动触发一次扫描，不影响定时任务的执行。",
+                                        },
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
                                 "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
