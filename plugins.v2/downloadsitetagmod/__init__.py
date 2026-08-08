@@ -26,7 +26,7 @@ from app.modules.qbittorrent.qbittorrent import Qbittorrent
 from app.core.metainfo import MetaInfo
 
 
-class DownloadSiteTagModNew(_PluginBase):
+class DownloadSiteTagMod(_PluginBase):
     # 插件名称
     plugin_name = "下载任务分类与标签魔改VUE版 -dlovew"
     # 插件描述
@@ -40,13 +40,13 @@ class DownloadSiteTagModNew(_PluginBase):
     # 作者主页
     author_url = "https://github.com/dlovew"
     # 插件配置项ID前缀
-    plugin_config_prefix = "DownloadSiteTagModNewdlovew_"
+    plugin_config_prefix = "DownloadSiteTagModdlovew_"
     # 加载顺序
     plugin_order = 2
     # 可使用的用户级别
     auth_level = 1
     # 日志前缀
-    LOG_TAG = "[DownloadSiteTagModNew] "
+    LOG_TAG = "[DownloadSiteTagMod] "
 
     # 退出事件
     _event = threading.Event()
