@@ -1,24 +1,16 @@
-"""
-qbtorrentfixer - 修复 qBittorrent 中"混合"状态的订阅合集种子
-
-问题背景：
-    通过 MoviePilot 订阅某剧集时，若最后一集以"打包合集"形式发布（含 1~N 集），
-    MoviePilot 会拆包并只勾选合集中的最后一集下载。这会导致 qBittorrent 中该种子
-    处于"混合"状态（部分文件下载、部分文件 priority=0）。
-    本插件定时/手动扫描 qBittorrent 中所有"混合"状态的种子，将其全部文件优先级
-    恢复为正常（priority=1），从而把种子状态由"混合"改回"正常"。
-"""
-
-import re
 from datetime import datetime, timedelta
+from threading import RLock
+from typing import Any, Dict, List, Tuple
 
-from apscheduler.triggers.cron import CronTrigger
+import pytz
+import re
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
 from app.core.event import eventmanager, Event
-from app.log import logger
 from app.helper.downloader import DownloaderHelper
+from app.log import logger
 from app.plugins import _PluginBase
 from app.schemas.types import EventType
 
@@ -34,7 +26,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.1"
+    plugin_version = "1.0.2"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -47,44 +39,48 @@ class QbTorrentFixer(_PluginBase):
 
     # 定时服务 id
     _service_id = "QbTorrentFixer.Scan"
+    # 临时调度器（「立即运行一次」使用）
+    _scheduler = None
+    # 线程锁
+    _lock = None
 
-    # 运行时状态字段
+    # 配置项
     _enabled = False
     _cron = "0 * * * *"
     _only_tag = ""
     _only_tracker = ""
     _notify_only = False
     _notify = True
-    _run_once = False
+    _onlyonce = False
+    # 运行日志
     _message = "插件尚未初始化"
     _last_log: List[str] = []
-    _scheduler = None
 
     def init_plugin(self, config: dict = None):
-        # 先清理可能正在运行的临时调度器
         self.stop_service()
+        self._lock = RLock()
         config = config or {}
-        self._enabled = bool(config.get("enabled"))
+        self._enabled = config.get("enabled") or False
         self._cron = config.get("cron") or "0 * * * *"
-        self._only_tag = (config.get("only_tag") or "").strip()
-        self._only_tracker = (config.get("only_tracker") or "").strip()
-        self._notify_only = bool(config.get("notify_only"))
+        self._only_tag = config.get("only_tag") or ""
+        self._only_tracker = config.get("only_tracker") or ""
+        self._notify_only = config.get("notify_only") or False
         self._notify = config.get("notify", True)
+        self._onlyonce = config.get("onlyonce") or False
         self._message = "插件已初始化，尚未运行过扫描。"
         self._last_log = []
 
-        # 「立即运行一次」：打开开关并保存后，延迟 3 秒触发一次扫描，然后把开关复位
-        if config.get("run_once"):
-            self._run_once = True
+        # 「立即运行一次」：开关打开并保存后，延迟 3 秒触发一次扫描，随后把开关复位
+        if self._onlyonce:
             logger.info("检测到「立即运行一次」，将延迟触发一次扫描")
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
             self._scheduler.add_job(
-                self.scan_and_fix,
-                "date",
-                run_date=datetime.now(tz=settings.TZ) + timedelta(seconds=3),
+                func=self.scan_and_fix,
+                trigger="date",
+                run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
             )
             self._scheduler.start()
-            # 复位开关，避免再次保存时重复触发
+            self._onlyonce = False
             self.update_config({
                 "enabled": self._enabled,
                 "cron": self._cron,
@@ -92,16 +88,14 @@ class QbTorrentFixer(_PluginBase):
                 "only_tracker": self._only_tracker,
                 "notify_only": self._notify_only,
                 "notify": self._notify,
-                "run_once": False,
+                "onlyonce": False,
             })
-            self._run_once = False
 
     def get_state(self) -> bool:
         return self._enabled
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        # 供远程命令（微信/API）调用，前端页面按钮不走这里
         return [
             {
                 "cmd": "/qbtorrentfixer_run",
@@ -121,7 +115,7 @@ class QbTorrentFixer(_PluginBase):
         try:
             trigger = CronTrigger.from_crontab(self._cron)
         except Exception as e:  # noqa: BLE001
-            self.error(f"定时表达式无效：{str(e)}，已回退为每小时执行")
+            logger.error(f"定时表达式无效：{str(e)}，已回退为每小时执行")
             trigger = CronTrigger.from_crontab("0 * * * *")
         return [
             {
@@ -134,10 +128,6 @@ class QbTorrentFixer(_PluginBase):
         ]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        # 上一次运行日志（只读展示在配置界面）
-        log_text = self._message
-        if self._last_log:
-            log_text = "\n".join(self._last_log)
         return [
             {
                 "component": "VForm",
@@ -243,7 +233,7 @@ class QbTorrentFixer(_PluginBase):
                                     {
                                         "component": "VSwitch",
                                         "props": {
-                                            "model": "run_once",
+                                            "model": "onlyonce",
                                             "label": "立即运行一次（保存配置后触发，运行完自动关闭）",
                                         },
                                     }
@@ -272,30 +262,6 @@ class QbTorrentFixer(_PluginBase):
                             }
                         ],
                     },
-                    {
-                        "component": "VRow",
-                        "content": [
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12},
-                                "content": [
-                                    {
-                                        "component": "VTextarea",
-                                        "props": {
-                                            "model": "run_log",
-                                            "label": "上次运行日志",
-                                            "readonly": True,
-                                            "rows": 10,
-                                            "auto-grow": True,
-                                            "variant": "filled",
-                                            "style": "white-space: pre-wrap; font-family: monospace;",
-                                            "text": log_text,
-                                        },
-                                    }
-                                ],
-                            }
-                        ],
-                    },
                 ],
             }
         ], {
@@ -305,7 +271,7 @@ class QbTorrentFixer(_PluginBase):
             "only_tracker": "",
             "notify_only": False,
             "notify": True,
-            "run_once": False,
+            "onlyonce": False,
         }
 
     def get_page(self) -> List[dict]:
@@ -315,17 +281,13 @@ class QbTorrentFixer(_PluginBase):
             log_text = "\n".join(self._last_log)
         return [
             {
-                "component": "VCard",
-                "props": {"title": "运行日志", "variant": "tonal"},
-                "content": [
-                    {
-                        "component": "VCardText",
-                        "props": {
-                            "style": "white-space: pre-wrap; font-family: monospace;",
-                        },
-                        "text": log_text,
-                    }
-                ],
+                "component": "VAlert",
+                "props": {
+                    "type": "info",
+                    "variant": "tonal",
+                    "style": "white-space: pre-wrap; font-family: monospace;",
+                    "text": log_text,
+                },
             },
         ]
 
@@ -355,133 +317,135 @@ class QbTorrentFixer(_PluginBase):
     # ------------------------------------------------------------------ #
     def scan_and_fix(self):
         """扫描所有 qBittorrent 下载器，修复混合状态种子。"""
-        logs: List[str] = [f"[开始] 扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"]
-        if not self.get_state():
-            logs.append("[跳过] 插件未启用。")
-            self._last_log = logs
-            self._message = "插件未启用，已跳过。"
-            self.info(self._message)
-            return
+        with self._lock:
+            logs: List[str] = [
+                f"[开始] 扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            ]
+            if not self.get_state():
+                logs.append("[跳过] 插件未启用。")
+                self._last_log = logs
+                self._message = "插件未启用，已跳过。"
+                logger.info(self._message)
+                return
 
-        helper = DownloaderHelper()
-        services = helper.get_services() or []
-        qb_services = [s for s in services if getattr(s, "type", "") == "qbittorrent"]
+            helper = DownloaderHelper()
+            services = helper.get_services() or []
+            qb_services = [s for s in services if getattr(s, "type", "") == "qbittorrent"]
 
-        if not qb_services:
-            msg = "未找到已启用的 qBittorrent 下载器，跳过本次扫描。"
-            logs.append(f"[警告] {msg}")
-            self._last_log = logs
-            self._message = msg
-            self.info(msg)
-            return
+            if not qb_services:
+                msg = "未找到已启用的 qBittorrent 下载器，跳过本次扫描。"
+                logs.append(f"[警告] {msg}")
+                self._last_log = logs
+                self._message = msg
+                logger.info(msg)
+                return
 
-        target_tags = {t.strip().lower() for t in self._only_tag.split(",") if t.strip()}
-        target_trackers = [t.strip().lower() for t in self._only_tracker.split(",") if t.strip()]
-        total_fixed = 0
-        total_skipped = 0
+            target_tags = {t.strip().lower() for t in self._only_tag.split(",") if t.strip()}
+            target_trackers = [t.strip().lower() for t in self._only_tracker.split(",") if t.strip()]
+            total_fixed = 0
+            total_skipped = 0
 
-        logs.append(f"[信息] 发现 {len(qb_services)} 个 qBittorrent 下载器，"
-                     f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
+            logs.append(f"[信息] 发现 {len(qb_services)} 个 qBittorrent 下载器，"
+                         f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
 
-        for service in qb_services:
-            downloader = service.instance
-            name = getattr(service, "name", "unknown")
-            try:
-                # 注意：get_torrents() 返回 (list, error) 元组
-                torrents, error = downloader.get_torrents()
-            except Exception as e:  # noqa: BLE001
-                logs.append(f"[错误] 读取下载器 {name} 种子列表失败：{str(e)}")
-                self.error(f"读取下载器 {name} 种子列表失败：{str(e)}")
-                continue
-
-            if error:
-                logs.append(f"[错误] 下载器 {name} 返回错误：{error}")
-                self.error(f"下载器 {name} 返回错误：{error}")
-                continue
-            if not torrents:
-                logs.append(f"[信息] 下载器 {name} 无种子。")
-                continue
-
-            logs.append(f"[信息] 下载器 {name} 共 {len(torrents)} 个种子。")
-
-            for torrent in torrents:
-                t_hash = torrent.get("hash")
-                t_name = torrent.get("name", t_hash)
-                if not t_hash:
+            for service in qb_services:
+                downloader = service.instance
+                name = getattr(service, "name", "unknown")
+                try:
+                    # get_torrents() 返回 (list, error) 元组
+                    torrents, error = downloader.get_torrents()
+                except Exception as e:  # noqa: BLE001
+                    logs.append(f"[错误] 读取下载器 {name} 种子列表失败：{str(e)}")
+                    logger.error(f"读取下载器 {name} 种子列表失败：{str(e)}")
                     continue
 
-                # 标签过滤（torrent 为 AttrDict，用 .get 安全获取）
-                if target_tags:
-                    tags = {str(t).lower() for t in (torrent.get("tags") or [])}
-                    if not (target_tags & tags):
+                if error:
+                    logs.append(f"[错误] 下载器 {name} 返回错误：{error}")
+                    logger.error(f"下载器 {name} 返回错误：{error}")
+                    continue
+                if not torrents:
+                    logs.append(f"[信息] 下载器 {name} 无种子。")
+                    continue
+
+                logs.append(f"[信息] 下载器 {name} 共 {len(torrents)} 个种子。")
+
+                for torrent in torrents:
+                    t_hash = torrent.get("hash")
+                    t_name = torrent.get("name", t_hash)
+                    if not t_hash:
                         continue
 
-                # 站点过滤：取种子所有 tracker 的域名进行匹配
-                if target_trackers:
-                    trackers = torrent.get("trackers") or []
-                    domains = set()
-                    for tr in trackers:
-                        url = tr.get("url") if isinstance(tr, dict) else str(tr)
-                        if url:
-                            m = re.search(r"https?://([^/]+)/?", url, re.IGNORECASE)
-                            if m:
-                                domains.add(m.group(1).lower())
-                    if not any(tk in d for d in domains for tk in target_trackers):
+                    # 标签过滤
+                    if target_tags:
+                        tags = {str(t).lower() for t in (torrent.get("tags") or [])}
+                        if not (target_tags & tags):
+                            continue
+
+                    # 站点过滤：取种子所有 tracker 的域名进行匹配
+                    if target_trackers:
+                        trackers = torrent.get("trackers") or []
+                        domains = set()
+                        for tr in trackers:
+                            url = tr.get("url") if isinstance(tr, dict) else str(tr)
+                            if url:
+                                m = re.search(r"https?://([^/]+)/?", url, re.IGNORECASE)
+                                if m:
+                                    domains.add(m.group(1).lower())
+                        if not any(tk in d for d in domains for tk in target_trackers):
+                            continue
+
+                    # 判定是否为「混合」状态：存在未选中的文件（priority == 0）
+                    try:
+                        files = downloader.get_files(t_hash) or []
+                    except Exception as e:  # noqa: BLE001
+                        logs.append(f"[错误] 读取种子 {t_name} 文件列表失败：{str(e)}")
+                        logger.error(f"读取种子 {t_name} 文件列表失败：{str(e)}")
                         continue
 
-                # 判定是否为「混合」状态：存在未选中的文件（priority == 0）
-                try:
-                    files = downloader.get_files(t_hash) or []
-                except Exception as e:  # noqa: BLE001
-                    logs.append(f"[错误] 读取种子 {t_name} 文件列表失败：{str(e)}")
-                    self.error(f"读取种子 {t_name} 文件列表失败：{str(e)}")
-                    continue
+                    if not files:
+                        continue
 
-                if not files:
-                    continue
+                    # qBittorrent 文件列表字段为 index / priority
+                    mixed_ids = [
+                        int(f.get("index"))
+                        for f in files
+                        if int(f.get("priority", 1) or 1) == 0
+                    ]
 
-                # qBittorrent 文件列表字段为 index / priority
-                mixed_ids = [
-                    int(f.get("index"))
-                    for f in files
-                    if int(f.get("priority", 1) or 1) == 0
-                ]
+                    if not mixed_ids:
+                        # 全部文件都在下载，属于正常状态
+                        continue
 
-                if not mixed_ids:
-                    # 全部文件都在下载，属于正常状态
-                    continue
+                    total_skipped += 1
+                    line = f"[{name}] {t_name}（{len(mixed_ids)}/{len(files)} 个文件被取消）"
+                    logs.append(f"[发现] {line}")
+                    logger.info(f"发现混合状态种子：{line}")
 
-                total_skipped += 1
-                line = f"[{name}] {t_name}（{len(mixed_ids)}/{len(files)} 个文件被取消）"
-                logs.append(f"[发现] {line}")
-                self.info(f"发现混合状态种子：{line}")
+                    if self._notify_only:
+                        logs.append(f"[仅通知] {t_name} 未修改（仅通知不处理）。")
+                        continue
 
-                if self._notify_only:
-                    logs.append(f"[仅通知] {t_name} 未修改（仅通知不处理）。")
-                    continue
+                    try:
+                        # 将全部文件优先级恢复为 1（正常），即把混合状态改为正常
+                        all_ids = [int(f.get("index")) for f in files]
+                        downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1)
+                        total_fixed += 1
+                        logs.append(f"[已修复] {t_name}")
+                        logger.info(f"已修复种子：{t_name}")
+                    except Exception as e:  # noqa: BLE001
+                        logs.append(f"[错误] 修复种子 {t_name} 失败：{str(e)}")
+                        logger.error(f"修复种子 {t_name} 失败：{str(e)}")
 
-                try:
-                    # 将全部文件优先级恢复为 1（正常），即把混合状态改为正常
-                    all_ids = [int(f.get("index")) for f in files]
-                    downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1)
-                    total_fixed += 1
-                    logs.append(f"[已修复] {t_name}")
-                    self.info(f"已修复种子：{t_name}")
-                except Exception as e:  # noqa: BLE001
-                    logs.append(f"[错误] 修复种子 {t_name} 失败：{str(e)}")
-                    self.error(f"修复种子 {t_name} 失败：{str(e)}")
+            summary = (f"[完成] 扫描 {len(qb_services)} 个下载器，"
+                       f"发现 {total_skipped} 个混合种子，"
+                       f"{'仅通知不处理' if self._notify_only else f'已修复 {total_fixed} 个'}。")
+            logs.append(summary)
+            self._last_log = logs
+            self._message = summary
+            logger.info(summary)
 
-        summary = (f"[完成] 扫描 {len(qb_services)} 个下载器，"
-                   f"发现 {total_skipped} 个混合种子，"
-                   f"{'仅通知不处理' if self._notify_only else f'已修复 {total_fixed} 个'}。")
-        logs.append(summary)
-        self._last_log = logs
-        self._message = summary
-        self.info(summary)
-
-        if self._notify:
-            detail = "\n".join(logs)
-            self.post_message(
-                title="qBittorrent 混合种子修复",
-                message=detail,
-            )
+            if self._notify:
+                self.post_message(
+                    title="qBittorrent 混合种子修复",
+                    message="\n".join(logs),
+                )
