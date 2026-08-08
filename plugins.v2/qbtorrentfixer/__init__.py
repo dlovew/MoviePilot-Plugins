@@ -10,12 +10,14 @@ qbtorrentfixer - 修复 qBittorrent 中"混合"状态的订阅合集种子
 """
 
 import re
-from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from datetime import datetime, timedelta
 
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.background import BackgroundScheduler
 
+from app.core.config import settings
 from app.core.event import eventmanager, Event
+from app.log import logger
 from app.helper.downloader import DownloaderHelper
 from app.plugins import _PluginBase
 from app.schemas.types import EventType
@@ -43,7 +45,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件可见权限级别
     auth_level = 1
 
-    # 定时服务 id，立即运行按钮通过该 id 触发
+    # 定时服务 id
     _service_id = "QbTorrentFixer.Scan"
 
     # 运行时状态字段
@@ -53,10 +55,14 @@ class QbTorrentFixer(_PluginBase):
     _only_tracker = ""
     _notify_only = False
     _notify = True
+    _run_once = False
     _message = "插件尚未初始化"
     _last_log: List[str] = []
+    _scheduler = None
 
     def init_plugin(self, config: dict = None):
+        # 先清理可能正在运行的临时调度器
+        self.stop_service()
         config = config or {}
         self._enabled = bool(config.get("enabled"))
         self._cron = config.get("cron") or "0 * * * *"
@@ -66,6 +72,29 @@ class QbTorrentFixer(_PluginBase):
         self._notify = config.get("notify", True)
         self._message = "插件已初始化，尚未运行过扫描。"
         self._last_log = []
+
+        # 「立即运行一次」：打开开关并保存后，延迟 3 秒触发一次扫描，然后把开关复位
+        if config.get("run_once"):
+            self._run_once = True
+            logger.info("检测到「立即运行一次」，将延迟触发一次扫描")
+            self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+            self._scheduler.add_job(
+                self.scan_and_fix,
+                "date",
+                run_date=datetime.now(tz=settings.TZ) + timedelta(seconds=3),
+            )
+            self._scheduler.start()
+            # 复位开关，避免再次保存时重复触发
+            self.update_config({
+                "enabled": self._enabled,
+                "cron": self._cron,
+                "only_tag": self._only_tag,
+                "only_tracker": self._only_tracker,
+                "notify_only": self._notify_only,
+                "notify": self._notify,
+                "run_once": False,
+            })
+            self._run_once = False
 
     def get_state(self) -> bool:
         return self._enabled
@@ -105,6 +134,10 @@ class QbTorrentFixer(_PluginBase):
         ]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        # 上一次运行日志（只读展示在配置界面）
+        log_text = self._message
+        if self._last_log:
+            log_text = "\n".join(self._last_log)
         return [
             {
                 "component": "VForm",
@@ -208,14 +241,55 @@ class QbTorrentFixer(_PluginBase):
                                 "props": {"cols": 12},
                                 "content": [
                                     {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "run_once",
+                                            "label": "立即运行一次（保存配置后触发，运行完自动关闭）",
+                                        },
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
                                         "component": "VAlert",
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
                                             "text": "本插件会扫描所有已启用的 qBittorrent 下载器，"
                                                     "将处于「混合」状态（部分文件未选中）的种子全部文件"
-                                                    "优先级恢复为正常，从而把状态由混合改回正常。"
-                                                    "点击「立即运行一次」请在下方「数据」标签页操作。",
+                                                    "优先级恢复为正常，从而把状态由混合改回正常。",
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VTextarea",
+                                        "props": {
+                                            "model": "run_log",
+                                            "label": "上次运行日志",
+                                            "readonly": True,
+                                            "rows": 10,
+                                            "auto-grow": True,
+                                            "variant": "filled",
+                                            "style": "white-space: pre-wrap; font-family: monospace;",
+                                            "text": log_text,
                                         },
                                     }
                                 ],
@@ -231,58 +305,15 @@ class QbTorrentFixer(_PluginBase):
             "only_tracker": "",
             "notify_only": False,
             "notify": True,
+            "run_once": False,
         }
 
     def get_page(self) -> List[dict]:
-        # 页面里用 PageRender 的 events 机制触发定时服务，实现真正的「立即运行一次」
-        # 注意：Vuetify3 的 VBtn 没有 text 文字 prop（text 是布尔样式），
-        # 按钮文字必须放在顶层 text 字段，才能被 PageRender 的 {{ config?.text }} 渲染。
+        # 「数据」标签页：展示最近一次运行日志
         log_text = self._message
         if self._last_log:
             log_text = "\n".join(self._last_log)
         return [
-            {
-                "component": "VRow",
-                "content": [
-                    {
-                        "component": "VCol",
-                        "props": {"cols": "auto"},
-                        "content": [
-                            {
-                                "component": "VBtn",
-                                "text": "立即运行一次",
-                                "props": {
-                                    "color": "primary",
-                                    "variant": "tonal",
-                                },
-                                # PageRender 支持 events.click.api，直接调用系统运行服务端点
-                                "events": {
-                                    "click": {
-                                        "api": "/system/runscheduler",
-                                        "method": "get",
-                                        "params": {"jobid": self._service_id},
-                                    }
-                                },
-                            }
-                        ],
-                    },
-                    {
-                        "component": "VCol",
-                        "props": {"cols": "auto"},
-                        "content": [
-                            {
-                                "component": "VAlert",
-                                "props": {
-                                    "type": "warning",
-                                    "variant": "tonal",
-                                },
-                                "text": "将按当前配置（含「仅通知不处理」开关）手动触发一次扫描，"
-                                        "不影响定时任务。运行结果见下方日志。",
-                            }
-                        ],
-                    },
-                ],
-            },
             {
                 "component": "VCard",
                 "props": {"title": "运行日志", "variant": "tonal"},
@@ -300,9 +331,15 @@ class QbTorrentFixer(_PluginBase):
 
     def stop_service(self):
         """
-        退出插件（基类要求的抽象方法，本插件无独立调度器，留空即可）
+        清理「立即运行一次」用到的临时调度器（基类要求的抽象方法）
         """
-        pass
+        try:
+            if self._scheduler:
+                self._scheduler.remove_all_jobs()
+                self._scheduler.shutdown(wait=False)
+                self._scheduler = None
+        except Exception:  # noqa: BLE001
+            pass
 
     @eventmanager.register(EventType.PluginAction)
     def run_command(self, event: Event):
