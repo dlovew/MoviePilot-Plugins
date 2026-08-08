@@ -32,7 +32,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.0"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -295,6 +295,12 @@ class QbTorrentFixer(_PluginBase):
                 ],
             },
         ]
+
+    def stop_service(self):
+        """
+        退出插件（基类要求的抽象方法，本插件无独立调度器，留空即可）
+        """
+        pass
 
     @eventmanager.register(EventType.PluginAction)
     def run_command(self, event: Event):
