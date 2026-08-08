@@ -27,7 +27,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.3"
+    plugin_version = "1.0.4"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -384,6 +384,41 @@ class QbTorrentFixer(_PluginBase):
     # 核心逻辑
     # ------------------------------------------------------------------ #
     @staticmethod
+    def __get_file_field(file_item, key: str, default=None):
+        """
+        兼容读取种子文件字段
+        qbittorrent-api 返回的是 TorrentFile 对象，既支持 get() 也支持属性访问
+        """
+        try:
+            value = file_item.get(key)
+        except Exception:  # noqa: BLE001
+            value = getattr(file_item, key, None)
+        return default if value is None else value
+
+    @classmethod
+    def __get_file_id(cls, file_item) -> Optional[int]:
+        """
+        获取文件 ID，主程序统一使用 id 字段，缺失时回退 index
+        """
+        value = cls.__get_file_field(file_item, "id")
+        if value is None:
+            value = cls.__get_file_field(file_item, "index")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def __get_file_priority(cls, file_item) -> int:
+        """
+        获取文件优先级，0 表示不下载
+        """
+        try:
+            return int(cls.__get_file_field(file_item, "priority", 1))
+        except (TypeError, ValueError):
+            return 1
+
+    @staticmethod
     def __get_torrent_domains(torrent) -> set:
         """
         获取种子的 tracker 域名集合
@@ -440,6 +475,7 @@ class QbTorrentFixer(_PluginBase):
             target_trackers = [t.strip().lower() for t in self._only_tracker.split(",") if t.strip()]
             total_fixed = 0
             total_skipped = 0
+            total_checked = 0
 
             logs.append(f"[信息] 发现 {len(service_infos)} 个可用 qBittorrent 下载器，"
                         f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
@@ -460,9 +496,11 @@ class QbTorrentFixer(_PluginBase):
                     continue
                 if not torrents:
                     logs.append(f"[信息] 下载器 {name} 无种子。")
+                    logger.info(f"下载器 {name} 无种子")
                     continue
 
                 logs.append(f"[信息] 下载器 {name} 共 {len(torrents)} 个种子。")
+                logger.info(f"下载器 {name} 共 {len(torrents)} 个种子，开始检查")
 
                 for torrent in torrents:
                     t_hash = torrent.get("hash")
@@ -486,6 +524,8 @@ class QbTorrentFixer(_PluginBase):
                         if not any(tk in d for d in domains for tk in target_trackers):
                             continue
 
+                    total_checked += 1
+
                     # 判定是否为「混合」状态：存在未选中的文件（priority == 0）
                     try:
                         files = downloader.get_files(t_hash) or []
@@ -497,12 +537,23 @@ class QbTorrentFixer(_PluginBase):
                     if not files:
                         continue
 
-                    # qBittorrent 文件列表字段为 index / priority
+                    # 单文件种子不存在「混合」概念，直接跳过
+                    if len(files) <= 1:
+                        continue
+
+                    # 注意：priority 为 0 表示不下载，不能写成 `or 1`，
+                    # 否则 0 会被判定为假值而被替换成 1，导致永远发现不了混合种子
+                    all_ids = [self.__get_file_id(f) for f in files]
                     mixed_ids = [
-                        int(f.get("index"))
+                        self.__get_file_id(f)
                         for f in files
-                        if int(f.get("priority", 1) or 1) == 0
+                        if self.__get_file_priority(f) == 0
                     ]
+
+                    if None in all_ids:
+                        logs.append(f"[跳过] {t_name} 文件列表缺少 id 字段，无法处理。")
+                        logger.warning(f"种子 {t_name} 文件列表缺少 id 字段，无法处理")
+                        continue
 
                     if not mixed_ids:
                         # 全部文件都在下载，属于正常状态
@@ -519,7 +570,6 @@ class QbTorrentFixer(_PluginBase):
 
                     try:
                         # 将全部文件优先级恢复为 1（正常），即把混合状态改为正常
-                        all_ids = [int(f.get("index")) for f in files]
                         # set_files 返回 bool，不抛异常
                         if downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1):
                             total_fixed += 1
@@ -533,6 +583,7 @@ class QbTorrentFixer(_PluginBase):
                         logger.error(f"修复种子 {t_name} 失败：{str(e)}")
 
             summary = (f"[完成] 扫描 {len(service_infos)} 个下载器，"
+                       f"过滤后检查 {total_checked} 个种子，"
                        f"发现 {total_skipped} 个混合种子，"
                        f"{'仅通知不处理' if self._notify_only else f'已修复 {total_fixed} 个'}。")
             logs.append(summary)
