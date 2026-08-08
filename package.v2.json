@@ -52,7 +52,8 @@
     "author": "dlovew",
     "level": 1,
     "history": {
-      "2.9.1": "基于 Seed680 订阅规则自动填充魔改版（2.9.0）重新发布为 dlovew 维护版：统一作者信息、插件名加 -dlovew 后缀以便区分",
+      "2.9.1": "统一作者信息、插件名加 -dlovew 后缀以便区分",
+      "2.9.0": "相对原版 2.8.7.3 的魔改：补全 _get_streaming_platform_from_title 流媒体平台识别（基于 Tokens/StreamingPlatforms 分词匹配）；修复「流媒体平台」填充的 include 拼接逻辑；修复 get_form 中 VSelect 选项拼写错误 vale→value 导致填充内容下拉不生效；数据页历史记录增加非 list 兜底",
       "2.9.0": "原版插件继承维护（基于 thsrite/Seed680 魔改版）"
     }
   }
