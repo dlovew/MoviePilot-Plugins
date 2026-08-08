@@ -26,7 +26,7 @@ from app.modules.qbittorrent.qbittorrent import Qbittorrent
 from app.core.metainfo import MetaInfo
 
 
-class DownloadSiteTagMod(_PluginBase):
+class DownloadSiteTagModdlovew(_PluginBase):
     # 插件名称
     plugin_name = "下载任务分类与标签魔改VUE版 -dlovew"
     # 插件描述

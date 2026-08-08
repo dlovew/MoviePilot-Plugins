@@ -28,7 +28,7 @@ from app.schemas.types import SystemConfigKey, MediaType, NotificationType
 lock = Lock()
 
 
-class RssSubscribe(_PluginBase):
+class RssSubscribedlovew(_PluginBase):
     # 插件名称
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     # 插件描述

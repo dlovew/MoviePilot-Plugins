@@ -17,7 +17,7 @@ from app.log import logger
 from app.schemas import NotificationType
 from app.helper.downloader import DownloaderHelper
 
-class CleanInvalidSeed(_PluginBase):
+class CleanInvalidSeeddlovew(_PluginBase):
     # 插件名称
     plugin_name = "清理无效做种 -dlovew"
     # 插件描述

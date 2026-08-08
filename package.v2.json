@@ -1,5 +1,5 @@
 {
-  "QbTorrentFixer": {
+  "QbTorrentFixerdlovew": {
     "name": "qBittorrent 混合种子修复 -dlovew",
     "description": "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。",
     "labels": "下载器,qBittorrent,订阅修复,混合种子,站点过滤",
@@ -17,7 +17,7 @@
       "1.0.0": "插件初版，整合混合种子扫描与恢复功能"
     }
   },
-  "CleanInvalidSeed": {
+  "CleanInvalidSeeddlovew": {
     "name": "清理无效做种 -dlovew",
     "description": "清理 qBittorrent/Transmission 中无效或不符合规则的做种任务。",
     "labels": "下载器,清理,做种,无效种子",
@@ -30,7 +30,7 @@
       "2.1": "原版插件继承维护"
     }
   },
-  "DownloadSiteTagMod": {
+  "DownloadSiteTagModdlovew": {
     "name": "下载任务分类与标签魔改VUE版 -dlovew",
     "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
     "labels": "下载器,qBittorrent,标签,分类,站点",
@@ -43,7 +43,7 @@
       "1.4.2": "原版插件继承维护"
     }
   },
-  "SubscribeGroupMod": {
+  "SubscribeGroupModdlovew": {
     "name": "订阅规则自动填充魔改版 -dlovew",
     "description": "基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季/集信息并优化数据获取。",
     "labels": "订阅,剧集,自动填充,规则",
@@ -56,7 +56,7 @@
       "2.9.0": "相对原版 2.8.7.3 的魔改：补全 _get_streaming_platform_from_title 流媒体平台识别（基于 Tokens/StreamingPlatforms 分词匹配）；修复「流媒体平台」填充的 include 拼接逻辑；修复 get_form 中 VSelect 选项拼写错误 vale→value 导致填充内容下拉不生效；数据页历史记录增加非 list 兜底"
     }
   },
-  "RssSubscribe": {
+  "RssSubscribedlovew": {
     "name": "自定义订阅番剧魔改版 -dlovew",
     "description": "监听 RSS 自动订阅番剧。按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点/制作组/特效/分辨率精细 include），其余仅通知。",
     "labels": "RSS,订阅,番剧,流媒体,自动订阅",

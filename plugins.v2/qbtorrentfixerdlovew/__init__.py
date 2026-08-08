@@ -16,7 +16,7 @@ from app.schemas import ServiceInfo
 from app.schemas.types import EventType
 
 
-class QbTorrentFixer(_PluginBase):
+class QbTorrentFixerdlovew(_PluginBase):
     # 插件在界面中的展示名称
     plugin_name = "qBittorrent 混合种子修复 -dlovew"
     # 插件描述
@@ -39,7 +39,7 @@ class QbTorrentFixer(_PluginBase):
     auth_level = 1
 
     # 定时服务 id
-    _service_id = "QbTorrentFixer.Scan"
+    _service_id = "QbTorrentFixerdlovew.Scan"
     # 临时调度器（「立即运行一次」使用）
     _scheduler = None
     # 线程锁

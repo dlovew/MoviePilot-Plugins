@@ -15,7 +15,7 @@ from app.schemas.types import EventType, SystemConfigKey, MediaType
 from app.utils.tokens import Tokens
 
 
-class SubscribeGroupMod(_PluginBase):
+class SubscribeGroupModdlovew(_PluginBase):
     # 插件名称
     plugin_name = "订阅规则自动填充魔改版 -dlovew"
     # 插件描述
