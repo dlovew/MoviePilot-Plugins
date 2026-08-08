@@ -32,7 +32,7 @@ class QbTorrentFixer(_PluginBase):
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     # 配置项前缀，保持唯一
-    plugin_config_prefix = "qbtorrentfixer_"
+    plugin_config_prefix = "qbtorrentfixerdlovew_"
     # 插件加载顺序
     plugin_order = 50
     # 插件可见权限级别
