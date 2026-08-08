@@ -31,7 +31,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -158,7 +158,7 @@ class QbTorrentFixer(_PluginBase):
                                         "props": {
                                             "color": "primary",
                                             "variant": "tonal",
-                                            "onclick": "qbtorrentfixer_run",
+                                            "onclick": "/qbtorrentfixer_run",
                                             "text": "立即运行一次",
                                         },
                                     }
@@ -275,7 +275,9 @@ class QbTorrentFixer(_PluginBase):
     @eventmanager.register(EventType.PluginAction)
     def run_command(self, event: Event):
         event_data = event.event_data or {}
-        if event_data.get("action") != "qbtorrentfixer_run":
+        # 兼容不同 MP 版本对 onclick 命令的 action 派发（带/不带斜杠）
+        action = str(event_data.get("action") or "").lstrip("/")
+        if action != "qbtorrentfixer_run":
             return
         self.scan_and_fix()
 
