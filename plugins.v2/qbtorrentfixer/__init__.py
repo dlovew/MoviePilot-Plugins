@@ -32,7 +32,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.1"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -235,6 +235,8 @@ class QbTorrentFixer(_PluginBase):
 
     def get_page(self) -> List[dict]:
         # 页面里用 PageRender 的 events 机制触发定时服务，实现真正的「立即运行一次」
+        # 注意：Vuetify3 的 VBtn 没有 text 文字 prop（text 是布尔样式），
+        # 按钮文字必须放在顶层 text 字段，才能被 PageRender 的 {{ config?.text }} 渲染。
         log_text = self._message
         if self._last_log:
             log_text = "\n".join(self._last_log)
@@ -248,10 +250,10 @@ class QbTorrentFixer(_PluginBase):
                         "content": [
                             {
                                 "component": "VBtn",
+                                "text": "立即运行一次",
                                 "props": {
                                     "color": "primary",
                                     "variant": "tonal",
-                                    "text": "立即运行一次",
                                 },
                                 # PageRender 支持 events.click.api，直接调用系统运行服务端点
                                 "events": {
@@ -273,9 +275,9 @@ class QbTorrentFixer(_PluginBase):
                                 "props": {
                                     "type": "warning",
                                     "variant": "tonal",
-                                    "text": "将按当前配置（含「仅通知不处理」开关）手动触发一次扫描，"
-                                            "不影响定时任务。运行结果见下方日志。",
                                 },
+                                "text": "将按当前配置（含「仅通知不处理」开关）手动触发一次扫描，"
+                                        "不影响定时任务。运行结果见下方日志。",
                             }
                         ],
                     },
@@ -289,8 +291,8 @@ class QbTorrentFixer(_PluginBase):
                         "component": "VCardText",
                         "props": {
                             "style": "white-space: pre-wrap; font-family: monospace;",
-                            "text": log_text,
                         },
+                        "text": log_text,
                     }
                 ],
             },

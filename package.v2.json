@@ -3,12 +3,13 @@
     "name": "qBittorrent 混合种子修复",
     "description": "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。",
     "labels": "下载器,qBittorrent,订阅修复,混合种子,站点过滤",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "system_version": ">=2.12.0",
     "level": 1,
     "history": {
+      "1.0.1": "修复数据页「立即运行一次」按钮因 Vuetify3 VBtn 无 text 文字属性导致不显示的问题",
       "1.0.0": "修复插件无法加载问题，并整合混合种子扫描与恢复功能"
     }
   }
