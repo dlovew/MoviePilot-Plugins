@@ -27,7 +27,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.4"
+    plugin_version = "1.0.5"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -57,6 +57,9 @@ class QbTorrentFixer(_PluginBase):
     # 运行日志
     _message = "插件尚未初始化"
     _last_log: List[str] = []
+    # 已处理的种子（展示在「数据」页）
+    # 元素: {"name":..., "downloader":..., "mixed":被取消文件数, "total":文件总数, "fixed":是否已修复}
+    _processed: List[Dict[str, Any]] = []
 
     def init_plugin(self, config: dict = None):
         self.stop_service()
@@ -72,6 +75,7 @@ class QbTorrentFixer(_PluginBase):
         self._onlyonce = config.get("onlyonce") or False
         self._message = "插件已初始化，尚未运行过扫描。"
         self._last_log = []
+        self._processed = []
 
         # 「立即运行一次」：独立于「启用插件」，开关打开并保存后延迟 3 秒触发一次扫描，随后复位开关
         if self._onlyonce:
@@ -342,18 +346,32 @@ class QbTorrentFixer(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        # 「数据」标签页：展示最近一次运行日志
-        log_text = self._message
-        if self._last_log:
-            log_text = "\n".join(self._last_log)
+        # 「数据」标签页：展示已处理的 torrent 名字列表
+        if not self._processed:
+            return [
+                {
+                    "component": "VAlert",
+                    "props": {
+                        "type": "info",
+                        "variant": "tonal",
+                        "text": "尚未处理过任何混合种子。点击下方「立即运行一次」开始扫描。",
+                    },
+                },
+            ]
+        rows = []
+        for item in self._processed:
+            status = "已修复" if item.get("fixed") else "仅通知"
+            rows.append(f"· {item.get('name')}（{item.get('downloader')} | {status} | "
+                        f"{item.get('mixed')}/{item.get('total')} 文件被取消）")
+        text = f"已处理 {len(self._processed)} 个混合种子：\n" + "\n".join(rows)
         return [
             {
                 "component": "VAlert",
                 "props": {
-                    "type": "info",
+                    "type": "success",
                     "variant": "tonal",
                     "style": "white-space: pre-wrap; font-family: monospace;",
-                    "text": log_text,
+                    "text": text,
                 },
             },
         ]
@@ -476,6 +494,8 @@ class QbTorrentFixer(_PluginBase):
             total_fixed = 0
             total_skipped = 0
             total_checked = 0
+            # 本次扫描发现的混合种子（用于「数据」页展示与通知推送）
+            mixed_torrents: List[Dict[str, Any]] = []
 
             logs.append(f"[信息] 发现 {len(service_infos)} 个可用 qBittorrent 下载器，"
                         f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
@@ -564,8 +584,17 @@ class QbTorrentFixer(_PluginBase):
                     logs.append(f"[发现] {line}")
                     logger.info(f"发现混合状态种子：{line}")
 
+                    record = {
+                        "name": t_name,
+                        "downloader": name,
+                        "mixed": len(mixed_ids),
+                        "total": len(files),
+                        "fixed": False,
+                    }
+
                     if self._notify_only:
                         logs.append(f"[仅通知] {t_name} 未修改（仅通知不处理）。")
+                        mixed_torrents.append(record)
                         continue
 
                     try:
@@ -573,6 +602,7 @@ class QbTorrentFixer(_PluginBase):
                         # set_files 返回 bool，不抛异常
                         if downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1):
                             total_fixed += 1
+                            record["fixed"] = True
                             logs.append(f"[已修复] {t_name}")
                             logger.info(f"已修复种子：{t_name}")
                         else:
@@ -581,6 +611,7 @@ class QbTorrentFixer(_PluginBase):
                     except Exception as e:  # noqa: BLE001
                         logs.append(f"[错误] 修复种子 {t_name} 失败：{str(e)}")
                         logger.error(f"修复种子 {t_name} 失败：{str(e)}")
+                    mixed_torrents.append(record)
 
             summary = (f"[完成] 扫描 {len(service_infos)} 个下载器，"
                        f"过滤后检查 {total_checked} 个种子，"
@@ -589,10 +620,20 @@ class QbTorrentFixer(_PluginBase):
             logs.append(summary)
             self._last_log = logs
             self._message = summary
+            self._processed = mixed_torrents
             logger.info(summary)
 
-            if self._notify:
+            if self._notify and mixed_torrents:
+                fixed_count = sum(1 for t in mixed_torrents if t.get("fixed"))
+                notify_lines = [
+                    f"共处理 {len(mixed_torrents)} 个混合种子"
+                    + (f"（已修复 {fixed_count} 个）" if not self._notify_only else "（仅通知）") + "："
+                ]
+                for t in mixed_torrents:
+                    status = "已修复" if t.get("fixed") else "未处理"
+                    notify_lines.append(f"· {t.get('name')}（{status} | "
+                                        f"{t.get('mixed')}/{t.get('total')} 文件被取消）")
                 self.post_message(
                     title="qBittorrent 混合种子修复",
-                    message="\n".join(logs),
+                    message="\n".join(notify_lines),
                 )
