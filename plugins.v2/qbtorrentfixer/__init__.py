@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from threading import RLock
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 import re
@@ -12,6 +12,7 @@ from app.core.event import eventmanager, Event
 from app.helper.downloader import DownloaderHelper
 from app.log import logger
 from app.plugins import _PluginBase
+from app.schemas import ServiceInfo
 from app.schemas.types import EventType
 
 
@@ -26,7 +27,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.2"
+    plugin_version = "1.0.3"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -47,6 +48,7 @@ class QbTorrentFixer(_PluginBase):
     # 配置项
     _enabled = False
     _cron = "0 * * * *"
+    _downloaders: List[str] = []
     _only_tag = ""
     _only_tracker = ""
     _notify_only = False
@@ -62,6 +64,7 @@ class QbTorrentFixer(_PluginBase):
         config = config or {}
         self._enabled = config.get("enabled") or False
         self._cron = config.get("cron") or "0 * * * *"
+        self._downloaders = config.get("downloaders") or []
         self._only_tag = config.get("only_tag") or ""
         self._only_tracker = config.get("only_tracker") or ""
         self._notify_only = config.get("notify_only") or False
@@ -70,7 +73,7 @@ class QbTorrentFixer(_PluginBase):
         self._message = "插件已初始化，尚未运行过扫描。"
         self._last_log = []
 
-        # 「立即运行一次」：开关打开并保存后，延迟 3 秒触发一次扫描，随后把开关复位
+        # 「立即运行一次」：独立于「启用插件」，开关打开并保存后延迟 3 秒触发一次扫描，随后复位开关
         if self._onlyonce:
             logger.info("检测到「立即运行一次」，将延迟触发一次扫描")
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
@@ -78,21 +81,56 @@ class QbTorrentFixer(_PluginBase):
                 func=self.scan_and_fix,
                 trigger="date",
                 run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                kwargs={"manual": True},
             )
-            self._scheduler.start()
             self._onlyonce = False
             self.update_config({
                 "enabled": self._enabled,
                 "cron": self._cron,
+                "downloaders": self._downloaders,
                 "only_tag": self._only_tag,
                 "only_tracker": self._only_tracker,
                 "notify_only": self._notify_only,
                 "notify": self._notify,
                 "onlyonce": False,
             })
+            if self._scheduler.get_jobs():
+                self._scheduler.print_jobs()
+                self._scheduler.start()
 
     def get_state(self) -> bool:
         return self._enabled
+
+    @property
+    def service_infos(self) -> Optional[Dict[str, ServiceInfo]]:
+        """
+        获取可用的 qBittorrent 下载器服务
+        未在配置中选择下载器时，默认使用全部已启用的 qBittorrent
+        """
+        helper = DownloaderHelper()
+        # get_services 返回的是 {名称: ServiceInfo} 字典
+        services = helper.get_services(
+            type_filter="qbittorrent",
+            name_filters=self._downloaders or None,
+        )
+        if not services:
+            logger.warning("获取 qBittorrent 下载器实例失败，请检查下载器配置")
+            return None
+
+        active_services = {}
+        for service_name, service_info in services.items():
+            if not service_info.instance:
+                logger.warning(f"下载器 {service_name} 实例不可用，已跳过")
+            elif service_info.instance.is_inactive():
+                logger.warning(f"下载器 {service_name} 未连接，请检查配置")
+            else:
+                active_services[service_name] = service_info
+
+        if not active_services:
+            logger.warning("没有已连接的 qBittorrent 下载器，请检查配置")
+            return None
+
+        return active_services
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -181,6 +219,32 @@ class QbTorrentFixer(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
+                                "props": {"cols": 12},
+                                "content": [
+                                    {
+                                        "component": "VSelect",
+                                        "props": {
+                                            "multiple": True,
+                                            "chips": True,
+                                            "clearable": True,
+                                            "model": "downloaders",
+                                            "label": "下载器（留空=全部已启用的 qBittorrent）",
+                                            "items": [
+                                                {"title": config.name, "value": config.name}
+                                                for config in DownloaderHelper().get_configs().values()
+                                                if config.type == "qbittorrent"
+                                            ],
+                                        },
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "component": "VRow",
+                        "content": [
+                            {
+                                "component": "VCol",
                                 "props": {"cols": 12, "md": 6},
                                 "content": [
                                     {
@@ -234,7 +298,7 @@ class QbTorrentFixer(_PluginBase):
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "onlyonce",
-                                            "label": "立即运行一次（保存配置后触发，运行完自动关闭）",
+                                            "label": "立即运行一次（无需启用插件，保存后触发，运行完自动关闭）",
                                         },
                                     }
                                 ],
@@ -253,9 +317,11 @@ class QbTorrentFixer(_PluginBase):
                                         "props": {
                                             "type": "info",
                                             "variant": "tonal",
-                                            "text": "本插件会扫描所有已启用的 qBittorrent 下载器，"
+                                            "text": "本插件会扫描选定的 qBittorrent 下载器（留空则为全部已启用的 qB），"
                                                     "将处于「混合」状态（部分文件未选中）的种子全部文件"
-                                                    "优先级恢复为正常，从而把状态由混合改回正常。",
+                                                    "优先级恢复为正常，从而把状态由混合改回正常。"
+                                                    "「立即运行一次」独立于「启用插件」，未启用插件时也可手动执行；"
+                                                    "「启用插件」仅控制定时任务是否注册。",
                                         },
                                     }
                                 ],
@@ -267,6 +333,7 @@ class QbTorrentFixer(_PluginBase):
         ], {
             "enabled": False,
             "cron": "0 * * * *",
+            "downloaders": [],
             "only_tag": "",
             "only_tracker": "",
             "notify_only": False,
@@ -310,34 +377,63 @@ class QbTorrentFixer(_PluginBase):
         action = str(event_data.get("action") or "").lstrip("/")
         if action != "qbtorrentfixer_run":
             return
-        self.scan_and_fix()
+        # 远程命令为手动触发，同样不受「启用插件」限制
+        self.scan_and_fix(manual=True)
 
     # ------------------------------------------------------------------ #
     # 核心逻辑
     # ------------------------------------------------------------------ #
-    def scan_and_fix(self):
-        """扫描所有 qBittorrent 下载器，修复混合状态种子。"""
+    @staticmethod
+    def __get_torrent_domains(torrent) -> set:
+        """
+        获取种子的 tracker 域名集合
+        torrents_info 只返回当前生效的 tracker，做种完成时可能为空，
+        此时回退到 qb 接口查询该种子的完整 tracker 列表
+        """
+        domains = set()
+
+        def _add(url: str):
+            if not url:
+                return
+            m = re.search(r"^(?:https?|udp)://([^:/]+)", str(url), re.IGNORECASE)
+            if m:
+                domains.add(m.group(1).lower())
+
+        _add(torrent.get("tracker"))
+        if not domains:
+            try:
+                # 回退：读取种子的全部 tracker
+                trackers = torrent.trackers or []
+                for tr in trackers:
+                    _add(tr.get("url") if isinstance(tr, dict) else tr)
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"获取种子 tracker 列表失败：{str(e)}")
+        return domains
+
+    def scan_and_fix(self, manual: bool = False):
+        """
+        扫描 qBittorrent 下载器，修复混合状态种子
+        :param manual: 是否为手动触发（「立即运行一次」/远程命令），手动触发不受「启用插件」限制
+        """
         with self._lock:
             logs: List[str] = [
                 f"[开始] 扫描时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"{'（手动触发）' if manual else ''}"
             ]
-            if not self.get_state():
+            if not manual and not self.get_state():
                 logs.append("[跳过] 插件未启用。")
                 self._last_log = logs
                 self._message = "插件未启用，已跳过。"
                 logger.info(self._message)
                 return
 
-            helper = DownloaderHelper()
-            services = helper.get_services() or []
-            qb_services = [s for s in services if getattr(s, "type", "") == "qbittorrent"]
-
-            if not qb_services:
-                msg = "未找到已启用的 qBittorrent 下载器，跳过本次扫描。"
+            service_infos = self.service_infos
+            if not service_infos:
+                msg = "未找到已连接的 qBittorrent 下载器，跳过本次扫描。"
                 logs.append(f"[警告] {msg}")
                 self._last_log = logs
                 self._message = msg
-                logger.info(msg)
+                logger.warning(msg)
                 return
 
             target_tags = {t.strip().lower() for t in self._only_tag.split(",") if t.strip()}
@@ -345,12 +441,11 @@ class QbTorrentFixer(_PluginBase):
             total_fixed = 0
             total_skipped = 0
 
-            logs.append(f"[信息] 发现 {len(qb_services)} 个 qBittorrent 下载器，"
-                         f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
+            logs.append(f"[信息] 发现 {len(service_infos)} 个可用 qBittorrent 下载器，"
+                        f"标签过滤={self._only_tag or '无'}，站点过滤={self._only_tracker or '无'}")
 
-            for service in qb_services:
+            for name, service in service_infos.items():
                 downloader = service.instance
-                name = getattr(service, "name", "unknown")
                 try:
                     # get_torrents() 返回 (list, error) 元组
                     torrents, error = downloader.get_torrents()
@@ -375,22 +470,19 @@ class QbTorrentFixer(_PluginBase):
                     if not t_hash:
                         continue
 
-                    # 标签过滤
+                    # 标签过滤：qB 的 tags 是逗号分隔的字符串
                     if target_tags:
-                        tags = {str(t).lower() for t in (torrent.get("tags") or [])}
+                        raw_tags = torrent.get("tags") or ""
+                        if isinstance(raw_tags, str):
+                            tags = {t.strip().lower() for t in raw_tags.split(",") if t.strip()}
+                        else:
+                            tags = {str(t).strip().lower() for t in raw_tags}
                         if not (target_tags & tags):
                             continue
 
-                    # 站点过滤：取种子所有 tracker 的域名进行匹配
+                    # 站点过滤：匹配种子当前 tracker 的域名
                     if target_trackers:
-                        trackers = torrent.get("trackers") or []
-                        domains = set()
-                        for tr in trackers:
-                            url = tr.get("url") if isinstance(tr, dict) else str(tr)
-                            if url:
-                                m = re.search(r"https?://([^/]+)/?", url, re.IGNORECASE)
-                                if m:
-                                    domains.add(m.group(1).lower())
+                        domains = self.__get_torrent_domains(torrent)
                         if not any(tk in d for d in domains for tk in target_trackers):
                             continue
 
@@ -428,15 +520,19 @@ class QbTorrentFixer(_PluginBase):
                     try:
                         # 将全部文件优先级恢复为 1（正常），即把混合状态改为正常
                         all_ids = [int(f.get("index")) for f in files]
-                        downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1)
-                        total_fixed += 1
-                        logs.append(f"[已修复] {t_name}")
-                        logger.info(f"已修复种子：{t_name}")
+                        # set_files 返回 bool，不抛异常
+                        if downloader.set_files(torrent_hash=t_hash, file_ids=all_ids, priority=1):
+                            total_fixed += 1
+                            logs.append(f"[已修复] {t_name}")
+                            logger.info(f"已修复种子：{t_name}")
+                        else:
+                            logs.append(f"[错误] 修复种子 {t_name} 失败，下载器返回失败")
+                            logger.error(f"修复种子 {t_name} 失败，下载器返回失败")
                     except Exception as e:  # noqa: BLE001
                         logs.append(f"[错误] 修复种子 {t_name} 失败：{str(e)}")
                         logger.error(f"修复种子 {t_name} 失败：{str(e)}")
 
-            summary = (f"[完成] 扫描 {len(qb_services)} 个下载器，"
+            summary = (f"[完成] 扫描 {len(service_infos)} 个下载器，"
                        f"发现 {total_skipped} 个混合种子，"
                        f"{'仅通知不处理' if self._notify_only else f'已修复 {total_fixed} 个'}。")
             logs.append(summary)
