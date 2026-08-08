@@ -53,8 +53,20 @@
     "level": 1,
     "history": {
       "2.9.1": "统一作者信息、插件名加 -dlovew 后缀以便区分",
-      "2.9.0": "相对原版 2.8.7.3 的魔改：补全 _get_streaming_platform_from_title 流媒体平台识别（基于 Tokens/StreamingPlatforms 分词匹配）；修复「流媒体平台」填充的 include 拼接逻辑；修复 get_form 中 VSelect 选项拼写错误 vale→value 导致填充内容下拉不生效；数据页历史记录增加非 list 兜底",
-      "2.9.0": "原版插件继承维护（基于 thsrite/Seed680 魔改版）"
+      "2.9.0": "相对原版 2.8.7.3 的魔改：补全 _get_streaming_platform_from_title 流媒体平台识别（基于 Tokens/StreamingPlatforms 分词匹配）；修复「流媒体平台」填充的 include 拼接逻辑；修复 get_form 中 VSelect 选项拼写错误 vale→value 导致填充内容下拉不生效；数据页历史记录增加非 list 兜底"
+    }
+  },
+  "RssSubscribe": {
+    "name": "自定义订阅番剧魔改版 -dlovew",
+    "description": "监听 RSS 自动订阅番剧。按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点/制作组/特效/分辨率精细 include），其余仅通知。",
+    "labels": "RSS,订阅,番剧,流媒体,自动订阅",
+    "version": "2.2",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "history": {
+      "2.2": "基于官方 rssubscribe 2.1 魔改并发布为 dlovew 维护版：按流媒体平台(IQ/LINETV)分流处理，新增强订阅 __add_strong_subscribe、__get_streaming_platforms、__get_site_ids、未识别资源通知 __notify_unknown；统一作者信息、插件名加 -dlovew 后缀、配置前缀加 dlovew",
+      "2.1": "官方原版继承"
     }
   }
 }
