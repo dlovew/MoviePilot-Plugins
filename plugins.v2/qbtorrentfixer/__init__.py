@@ -18,7 +18,7 @@ from app.schemas.types import EventType
 
 class QbTorrentFixer(_PluginBase):
     # 插件在界面中的展示名称
-    plugin_name = "qBittorrent 混合种子修复"
+    plugin_name = "qBittorrent 混合种子修复 -dlovew"
     # 插件描述
     plugin_desc = (
         "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集"
@@ -27,7 +27,7 @@ class QbTorrentFixer(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.5"
+    plugin_version = "1.0.6"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -346,34 +346,62 @@ class QbTorrentFixer(_PluginBase):
         }
 
     def get_page(self) -> List[dict]:
-        # 「数据」标签页：展示已处理的 torrent 名字列表
+        # 「数据」标签页：以表格展示已处理的混合种子
         if not self._processed:
             return [
                 {
-                    "component": "VAlert",
-                    "props": {
-                        "type": "info",
-                        "variant": "tonal",
-                        "text": "尚未处理过任何混合种子。点击下方「立即运行一次」开始扫描。",
-                    },
-                },
+                    "component": "div",
+                    "text": "尚未处理过任何混合种子。点击下方「立即运行一次」开始扫描。",
+                    "props": {"class": "text-center"},
+                }
             ]
+        processed = sorted(self._processed, key=lambda x: x.get("time") or "", reverse=True)
         rows = []
-        for item in self._processed:
+        for item in processed:
             status = "已修复" if item.get("fixed") else "仅通知"
-            rows.append(f"· {item.get('name')}（{item.get('downloader')} | {status} | "
-                        f"{item.get('mixed')}/{item.get('total')} 文件被取消）")
-        text = f"已处理 {len(self._processed)} 个混合种子：\n" + "\n".join(rows)
+            rows.append({
+                "component": "tr",
+                "content": [
+                    {"component": "td", "text": item.get("time")},
+                    {"component": "td", "text": item.get("name")},
+                    {"component": "td", "text": item.get("downloader")},
+                    {"component": "td", "text": status},
+                    {"component": "td", "text": f"{item.get('mixed')}/{item.get('total')}"},
+                ],
+            })
         return [
             {
-                "component": "VAlert",
-                "props": {
-                    "type": "success",
-                    "variant": "tonal",
-                    "style": "white-space: pre-wrap; font-family: monospace;",
-                    "text": text,
-                },
-            },
+                "component": "VRow",
+                "content": [
+                    {
+                        "component": "VCol",
+                        "content": [
+                            {
+                                "component": "VTable",
+                                "props": {"hover": True},
+                                "content": [
+                                    {
+                                        "component": "thead",
+                                        "content": [
+                                            {
+                                                "component": "tr",
+                                                "content": [
+                                                    {"component": "th", "text": "处理时间"},
+                                                    {"component": "th", "text": "种子名称"},
+                                                    {"component": "th", "text": "下载器"},
+                                                    {"component": "th", "text": "状态"},
+                                                    {"component": "th", "text": "被取消文件"},
+                                                ],
+                                            }
+                                        ],
+                                    },
+                                    {"component": "tbody", "content": rows},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
         ]
 
     def stop_service(self):
@@ -590,6 +618,7 @@ class QbTorrentFixer(_PluginBase):
                         "mixed": len(mixed_ids),
                         "total": len(files),
                         "fixed": False,
+                        "time": datetime.now(tz=pytz.timezone(settings.TZ)).strftime("%Y-%m-%d %H:%M:%S"),
                     }
 
                     if self._notify_only:
@@ -635,5 +664,5 @@ class QbTorrentFixer(_PluginBase):
                                         f"{t.get('mixed')}/{t.get('total')} 文件被取消）")
                 self.post_message(
                     title="qBittorrent 混合种子修复",
-                    message="\n".join(notify_lines),
+                    text="\n".join(notify_lines),
                 )

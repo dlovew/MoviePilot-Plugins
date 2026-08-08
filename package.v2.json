@@ -1,19 +1,59 @@
 {
   "QbTorrentFixer": {
-    "name": "qBittorrent 混合种子修复",
+    "name": "qBittorrent 混合种子修复 -dlovew",
     "description": "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。",
     "labels": "下载器,qBittorrent,订阅修复,混合种子,站点过滤",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "history": {
+      "1.0.6": "修复通知推送仅有标题的问题（改用 text 参数）；「数据」页改为表格展示已处理种子（时间/名称/下载器/状态/取消文件数）",
       "1.0.5": "「数据」页改为展示已处理种子列表；通知推送仅显示处理个数与种子名称（不再推送全部日志）",
       "1.0.4": "修复混合种子始终检测为 0 的问题（优先级 0 被误判）；文件 ID 改用 id 字段；补充扫描过程日志",
       "1.0.3": "修复未找到下载器的问题；新增下载器选择框；「立即运行一次」不再受启用开关限制",
       "1.0.2": "按官方插件范式重构，修复插件加载失败（时区参数、日志展示、加锁）",
       "1.0.1": "「立即运行一次」改为配置界面开关",
       "1.0.0": "插件初版，整合混合种子扫描与恢复功能"
+    }
+  },
+  "CleanInvalidSeed": {
+    "name": "清理无效做种 -dlovew",
+    "description": "清理 qBittorrent/Transmission 中无效或不符合规则的做种任务。",
+    "labels": "下载器,清理,做种,无效种子",
+    "version": "2.2",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "history": {
+      "2.2": "修复双 tracker 无法处理的问题",
+      "2.1": "原版插件继承维护"
+    }
+  },
+  "DownloadSiteTagMod": {
+    "name": "下载任务分类与标签魔改VUE版 -dlovew",
+    "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
+    "labels": "下载器,qBittorrent,标签,分类,站点",
+    "version": "1.4.3",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "history": {
+      "1.4.3": "修复插件带来的标签乱码问题",
+      "1.4.2": "原版插件继承维护"
+    }
+  },
+  "SubscribeGroupMod": {
+    "name": "订阅规则自动填充魔改版 -dlovew",
+    "description": "基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季/集信息并优化数据获取。",
+    "labels": "订阅,剧集,自动填充,规则",
+    "version": "2.9.1",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "history": {
+      "2.9.1": "基于 Seed680 订阅规则自动填充魔改版（2.9.0）重新发布为 dlovew 维护版：统一作者信息、插件名加 -dlovew 后缀以便区分",
+      "2.9.0": "原版插件继承维护（基于 thsrite/Seed680 魔改版）"
     }
   }
 }
