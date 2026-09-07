@@ -34,12 +34,13 @@
     "name": "下载任务分类与标签魔改VUE版 -dlovew",
     "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
     "labels": "下载器,qBittorrent,标签,分类,站点",
-    "version": "1.4.4",
+    "version": "1.4.5",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "v3": false,
     "history": {
+      "1.4.5": "修复设置界面 Not Found：移除 Config.vue 中多余的 plugin/{id}/config GET 请求（V3 配置已通过 initialConfig 注入，该端点不存在）",
       "1.4.4": "修复设置界面 not found 提示：前端远程组件硬编码的插件 ID 已同步为当前类名",
       "1.4.3": "修复插件带来的标签乱码问题",
       "1.4.2": "原版插件继承维护"
@@ -49,12 +50,13 @@
     "name": "订阅规则自动填充魔改版 -dlovew",
     "description": "基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季/集信息并优化数据获取。",
     "labels": "订阅,剧集,自动填充,规则",
-    "version": "2.9.1",
+    "version": "2.9.2",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "v3": false,
     "history": {
+      "2.9.2": "修复历史记录中文乱码（mojibake）：history content 序列化改为 ensure_ascii=True，防止存储层二次编码损坏",
       "2.9.1": "统一作者信息、插件名加 -dlovew 后缀以便区分",
       "2.9.0": "相对原版 2.8.7.3 的魔改：补全 _get_streaming_platform_from_title 流媒体平台识别（基于 Tokens/StreamingPlatforms 分词匹配）；修复「流媒体平台」填充的 include 拼接逻辑；修复 get_form 中 VSelect 选项拼写错误 vale→value 导致填充内容下拉不生效；数据页历史记录增加非 list 兜底"
     }
