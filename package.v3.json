@@ -1,0 +1,47 @@
+{
+  "DownloadSiteTagModdlovew": {
+    "name": "下载任务分类与标签魔改VUE版 -dlovew",
+    "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
+    "labels": "下载器,qBittorrent,标签,分类,站点",
+    "version": "2.0.0",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "2.0.0": "V3 专用版本：适配统一媒体身份（下载历史 tmdbid 改为 media_source/media_id）；修复 V3 分类策略迁移后分类重命名列表长度不匹配导致的插件加载崩溃（list index out of range）",
+      "1.4.3": "V2 版本：修复插件带来的标签乱码问题",
+      "1.4.2": "V2 版本：原版插件继承维护"
+    }
+  },
+  "SubscribeGroupModdlovew": {
+    "name": "订阅规则自动填充魔改版 -dlovew",
+    "description": "基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季/集信息并优化数据获取。",
+    "labels": "订阅,剧集,自动填充,规则",
+    "version": "3.0.0",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "3.0.0": "V3 专用版本：订阅查询由 list_by_tmdbid 改为 list_by_media_identity 并自行按季过滤；下载历史改用 media_source/media_id",
+      "2.9.1": "V2 版本：统一作者信息、插件名加 -dlovew 后缀以便区分",
+      "2.9.0": "V2 版本：相对原版 2.8.7.3 的魔改，补全流媒体平台识别、修复 VSelect 的 vale 笔误、数据页非 list 兜底"
+    }
+  },
+  "RssSubscribedlovew": {
+    "name": "自定义订阅番剧魔改版 -dlovew",
+    "description": "监听 RSS 自动订阅番剧。按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点/制作组/特效/分辨率精细 include），其余仅通知。",
+    "labels": "RSS,订阅,番剧,流媒体,自动订阅",
+    "version": "3.0.0",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "3.0.0": "V3 专用版本：强订阅改用 media_source/media_id 传参（旧 tmdbid 参数在 V3 会被忽略，导致订阅缺少媒体身份）；插件历史记录补充统一身份字段",
+      "2.2": "V2 版本：基于官方 rssubscribe 2.1 魔改，按流媒体平台(IQ/LINETV)分流处理",
+      "2.1": "V2 版本：官方原版继承"
+    }
+  }
+}
