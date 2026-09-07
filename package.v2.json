@@ -34,12 +34,13 @@
     "name": "下载任务分类与标签魔改VUE版 -dlovew",
     "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
     "labels": "下载器,qBittorrent,标签,分类,站点",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "v3": false,
     "history": {
+      "1.4.4": "修复设置界面 not found 提示：前端远程组件硬编码的插件 ID 已同步为当前类名",
       "1.4.3": "修复插件带来的标签乱码问题",
       "1.4.2": "原版插件继承维护"
     }

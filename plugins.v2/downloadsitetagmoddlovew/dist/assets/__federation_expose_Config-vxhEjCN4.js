@@ -39,7 +39,7 @@ const intervalUnits = ['分钟','小时'];
 
 // 配置数据，使用默认值和初始配置合并
 const defaultConfig = {
-  id: 'DownloadSiteTagModNew',
+  id: 'DownloadSiteTagModdlovew',
   name: '下载任务分类与标签联邦魔改版',
 };
 
