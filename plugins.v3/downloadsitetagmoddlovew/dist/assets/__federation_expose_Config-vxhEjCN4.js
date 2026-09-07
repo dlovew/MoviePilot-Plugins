@@ -47,11 +47,8 @@ const defaultConfig = {
 const config = reactive({ ...defaultConfig, ...props.initialConfig});
 
 
-// 初始化配置
-onMounted(async () => {
-  const data = await props.api.get(`plugin/${config.id}/config`);
-  Object.assign(config, {...config, ...data});
-});
+// 初始化配置（V3 配置已通过 props.initialConfig 注入，无需额外请求）
+// 注：原 onMounted 中请求 plugin/${config.id}/config 的端点在 V3 后端不存在，已移除
 
 // 自定义事件，用于保存配置
 const emit = __emit;

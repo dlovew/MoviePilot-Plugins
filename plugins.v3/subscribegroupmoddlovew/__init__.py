@@ -24,7 +24,7 @@ class SubscribeGroupModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "teamwork.png"
     # 插件版本
-    plugin_version = "3.0.0"
+    plugin_version = "3.0.1"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -224,7 +224,7 @@ class SubscribeGroupModdlovew(_PluginBase):
             history.append({
                 'name': mediainfo.get('title'),
                 'type': f'订阅自动填充 (二级分类:{category})',
-                'content': json.dumps(update_dict, ensure_ascii=False),
+                'content': json.dumps(update_dict, ensure_ascii=True),
                 "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
             })
             self.save_data(key="history", value=history)
@@ -329,7 +329,7 @@ class SubscribeGroupModdlovew(_PluginBase):
                 history.append({
                     'name': subscribe.name,
                     'type': '下载触发填充',
-                    'content': json.dumps(update_dict, ensure_ascii=False),
+                    'content': json.dumps(update_dict, ensure_ascii=True),
                     "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
                 })
                 self.save_data(key="history", value=history)
