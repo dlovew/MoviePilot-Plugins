@@ -223,7 +223,7 @@ class SubscribeGroupModdlovew(_PluginBase):
             history.append({
                 'name': mediainfo.get('title'),
                 'type': f'订阅自动填充 (二级分类:{category})',
-                'content': json.dumps(update_dict, ensure_ascii=False),
+                'content': json.dumps(update_dict, ensure_ascii=True),
                 "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
             })
             self.save_data(key="history", value=history)
@@ -317,7 +317,7 @@ class SubscribeGroupModdlovew(_PluginBase):
                 history.append({
                     'name': subscribe.name,
                     'type': '下载触发填充',
-                    'content': json.dumps(update_dict, ensure_ascii=False),
+                    'content': json.dumps(update_dict, ensure_ascii=True),
                     "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
                 })
                 self.save_data(key="history", value=history)
