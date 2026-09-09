@@ -10,17 +10,16 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app import schemas
-from app.chain.download import DownloadChain
 from app.chain.subscribe import SubscribeChain
-from app.core.config import settings
-from app.core.context import MediaInfo, TorrentInfo, Context
-from app.core.metainfo import MetaInfo
-from app.core.meta.streamingplatform import StreamingPlatforms
-from app.db.site_oper import SiteOper
-from app.helper.rss import RssHelper
-from app.utils.tokens import Tokens
+from app.runtime.config import settings
+from app.domain.context import MediaInfo, TorrentInfo, Context
+from app.domain.metainfo import MetaInfo
+from app.domain.meta.streamingplatform import StreamingPlatforms
+from app.db.oper.site import SiteOper
+from app.application.rss import RssHelper
+from app.domain.tokens import Tokens
 from urllib.parse import urlparse
-from app.log import logger
+from app.sdk.logging import logger
 from app.plugins import _PluginBase
 from app.schemas import ExistMediaInfo
 from app.schemas.types import SystemConfigKey, MediaType, NotificationType, MediaSource
@@ -36,7 +35,7 @@ class RssSubscribedlovew(_PluginBase):
     # 插件图标
     plugin_icon = "rss.png"
     # 插件版本
-    plugin_version = "3.0.0"
+    plugin_version = "3.0.1"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -613,7 +612,6 @@ class RssSubscribedlovew(_PluginBase):
             history = []
         else:
             history: List[dict] = self.get_data('history') or []
-        downloadchain = DownloadChain()
         subscribechain = SubscribeChain()
         for url in self._address.split("\n"):
             # 处理每一个RSS链接

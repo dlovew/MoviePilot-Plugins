@@ -37,12 +37,13 @@
     "name": "自定义订阅番剧魔改版 -dlovew",
     "description": "监听 RSS 自动订阅番剧。按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点/制作组/特效/分辨率精细 include），其余仅通知。",
     "labels": "RSS,订阅,番剧,流媒体,自动订阅",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "icon": "qBittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
+      "3.0.1": "V3 适配：import 路径迁移到 V3 新结构（app.runtime.config、app.domain.context/metainfo/tokens、app.db.oper.site、app.application.rss、app.sdk.logging），消除兼容层警告；移除未使用的 DownloadChain",
       "3.0.0": "V3 专用版本：强订阅改用 media_source/media_id 传参（旧 tmdbid 参数在 V3 会被忽略，导致订阅缺少媒体身份）；插件历史记录补充统一身份字段",
       "2.2": "V2 版本：基于官方 rssubscribe 2.1 魔改，按流媒体平台(IQ/LINETV)分流处理",
       "2.1": "V2 版本：官方原版继承"
