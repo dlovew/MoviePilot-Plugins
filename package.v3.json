@@ -48,5 +48,19 @@
       "2.2": "V2 版本：基于官方 rssubscribe 2.1 魔改，按流媒体平台(IQ/LINETV)分流处理",
       "2.1": "V2 版本：官方原版继承"
     }
+  },
+  "QbTorrentFixerdlovew": {
+    "name": "qBittorrent 混合种子修复 -dlovew",
+    "description": "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。",
+    "labels": "下载器,qBittorrent,订阅修复,混合种子,站点过滤",
+    "version": "3.0.0",
+    "icon": "qBittorrent_A.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "3.0.0": "V3 专用版本：import 路径迁移到 V3 新结构（app.runtime.config、app.sdk.events、app.application.downloader、app.sdk.logging）；修复「数据」页重启/重载后数据丢失，已处理种子持久化到插件数据并去重保留最近 200 条",
+      "1.0.6": "V2 版本：修复通知推送仅有标题；「数据」页改为表格展示已处理种子"
+    }
   }
 }

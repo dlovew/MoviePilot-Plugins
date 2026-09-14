@@ -7,10 +7,10 @@ import re
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.core.config import settings
-from app.core.event import eventmanager, Event
-from app.helper.downloader import DownloaderHelper
-from app.log import logger
+from app.runtime.config import settings
+from app.sdk.events import eventmanager, Event
+from app.application.downloader import DownloaderHelper
+from app.sdk.logging import logger
 from app.plugins import _PluginBase
 from app.schemas import ServiceInfo
 from app.schemas.types import EventType
@@ -27,7 +27,7 @@ class QbTorrentFixerdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "qBittorrent_A.png"
     # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "1.0.7"
+    plugin_version = "3.0.0"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
