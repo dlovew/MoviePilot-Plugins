@@ -35,7 +35,7 @@ class RssSubscribedlovew(_PluginBase):
     # 插件图标
     plugin_icon = "rss.png"
     # 插件版本
-    plugin_version = "3.0.1"
+    plugin_version = "3.0.2"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -480,7 +480,7 @@ class RssSubscribedlovew(_PluginBase):
                             },
                             'events': {
                                 'click': {
-                                    'api': 'plugin/RssSubscribe/delete_history',
+                                    'api': f'plugin/{self.__class__.__name__}/delete_history',
                                     'method': 'get',
                                     'params': {
                                         'key': title,
