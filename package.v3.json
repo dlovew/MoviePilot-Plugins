@@ -60,8 +60,21 @@
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
-      "3.0.0": "V3 专用版本：import 路径迁移到 V3 新结构（app.runtime.config、app.sdk.events、app.application.downloader、app.sdk.logging）；修复「数据」页重启/重载后数据丢失，已处理种子持久化到插件数据并去重保留最近 200 条",
+      "3.0.0": "V3 专用版本：修复删除合集最后一集时偶发 FileNotFoundError（空目录清理与下载器竞态）——__remove_parent_dir 的 shutil.rmtree 容忍 FileNotFoundError，且清理异常不再中断删种与历史处理；数据面板删除按钮插件 ID 改为动态 self.__class__.__name__",
       "1.0.6": "V2 版本：修复通知推送仅有标题；「数据」页改为表格展示已处理种子"
+    }
+  },
+  "MediaSyncDeldlovew": {
+    "name": "媒体文件同步删除 -dlovew",
+    "description": "根据媒体服务器删除事件同步清理整理历史、源文件和下载任务，支持辅种与合集种子处理。",
+    "labels": "同步删除,源文件,整理历史,删种,辅种,合集,Emby,Webhook",
+    "version": "3.0.0",
+    "icon": "mediasyncdel.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "history": {
+      "3.0.0": "V3 专用版本（基于 thsrite MediaSyncDel 2.0.2）：修复删除季种合集最后一集时偶发 FileNotFoundError —— 空目录清理与下载器存在竞态，shutil.rmtree 改为容忍 FileNotFoundError，且清理异常不再中断后续删种、整理历史与通知；数据面板删除按钮插件 ID 由硬编码改为动态 self.__class__.__name__"
     }
   }
 }

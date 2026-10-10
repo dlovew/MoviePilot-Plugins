@@ -3,7 +3,7 @@
 **MoviePilot V3 自用插件仓库**
 
 ![兼容版本](https://img.shields.io/badge/MoviePilot-V3-8b949e?style=flat-square)
-![插件数量](https://img.shields.io/badge/plugins-4-8b949e?style=flat-square)
+![插件数量](https://img.shields.io/badge/plugins-5-8b949e?style=flat-square)
 ![作者](https://img.shields.io/badge/author-dlovew-8b949e?style=flat-square)
 [![最近提交](https://img.shields.io/github/last-commit/dlovew/MoviePilot-Plugins?style=flat-square&color=8b949e)](https://github.com/dlovew/MoviePilot-Plugins/commits/main)
 
@@ -23,6 +23,7 @@
 | 📺 | 订阅规则自动填充魔改版 -dlovew | 基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季 / 集信息并优化数据获取。 | SubscribeGroupMod (Seed680) |
 | 📡 | 自定义订阅番剧魔改版 -dlovew | 监听 RSS 自动订阅番剧；按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点 / 制作组 / 特效 / 分辨率精细 include），其余仅通知。 | 官方 rssubscribe 2.1 |
 | 🔧 | qBittorrent 混合种子修复 -dlovew | 定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。 | 原创自用 |
+| 🗑️ | 媒体文件同步删除 -dlovew | 根据媒体服务器删除事件同步清理整理历史、源文件和下载任务，支持辅种与合集种子处理。 | MediaSyncDel (thsrite) |
 
 > 命名规则：在原版插件名后追加 `-dlovew` 后缀，作者统一为 `dlovew`，插件 ID 维持原版不变，确保升级无碍。
 
