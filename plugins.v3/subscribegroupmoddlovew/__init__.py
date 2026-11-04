@@ -7,11 +7,11 @@ from app.db.oper.downloadhistory import DownloadHistoryOper
 from app.db.oper.site import SiteOper
 from app.db.oper.subscribe import SubscribeOper
 from app.domain.meta.streamingplatform import StreamingPlatforms
-from app.plugins import _PluginBase
 from app.schemas.types import EventType, SystemConfigKey, MediaType, MediaSource
 from app.sdk.events import Event, eventmanager
 from app.sdk.logging import logger
 from app.sdk.media import MetaVideo, Tokens
+from app.sdk.plugin import _PluginBase
 
 
 class SubscribeGroupModdlovew(_PluginBase):
@@ -21,8 +21,8 @@ class SubscribeGroupModdlovew(_PluginBase):
     plugin_desc = "电视剧下载后自动添加官组等信息到订阅；添加订阅后根据二级分类名称自定义订阅规则。订阅时支持从标题识别流媒体平台。"
     # 插件图标
     plugin_icon = "teamwork.png"
-    # 插件版本
-    plugin_version = "3.0.2"
+    # 插件版本，必须和 package.v3.json 中保持一致
+    plugin_version = "3.0.3"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页

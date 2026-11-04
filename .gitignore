@@ -161,3 +161,6 @@ cython_debug/
 
 .idea/
 .vscode/
+
+# 前端工程本地依赖（dist/assets 构建产物必须提交，不在此忽略）
+node_modules/

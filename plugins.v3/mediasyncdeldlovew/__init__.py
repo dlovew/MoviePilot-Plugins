@@ -7,12 +7,12 @@ from typing import List, Tuple, Dict, Any, Optional
 from app import schemas
 from app.db.oper.downloadhistory import DownloadHistoryOper
 from app.db.oper.transferhistory import TransferHistoryOper
-from app.plugins import _PluginBase
 from app.schemas.types import EventType, MediaImageType, MediaSource, MediaType, MessageType
 from app.sdk.config import settings
 from app.sdk.events import Event, eventmanager
 from app.sdk.logging import logger
 from app.sdk.media import build_media_key, resolve_media_identity
+from app.sdk.plugin import _PluginBase
 from app.sdk.services import DownloaderHelper
 from app.sdk.utilities import StringUtils, SystemUtils
 
@@ -26,8 +26,8 @@ class MediaSyncDeldlovew(_PluginBase):
     plugin_desc = "同步删除历史记录、源文件和下载任务。"
     # 插件图标
     plugin_icon = "mediasyncdel.png"
-    # 插件版本
-    plugin_version = "3.0.0"
+    # 插件版本，必须和 package.v3.json 中保持一致
+    plugin_version = "3.0.1"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页

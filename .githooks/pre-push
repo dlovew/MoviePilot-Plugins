@@ -1,8 +1,16 @@
 #!/bin/sh
-# 在对象上传前复用发布版本校验，避免市场元数据与插件自报版本分离。
+# 在对象上传前复用 V3 版本校验，避免市场元数据与插件自报版本分离。
+# 启用方式：git config core.hooksPath .githooks
 set -eu
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-python3 .github/scripts/check_plugin_versions.py package.json package.v2.json
+if command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+  python .github/scripts/check_plugin_versions.py package.v3.json
+elif command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+  python3 .github/scripts/check_plugin_versions.py package.v3.json
+else
+  echo "pre-push: 未找到可用的 Python 解释器，无法校验 package.v3.json" >&2
+  exit 1
+fi

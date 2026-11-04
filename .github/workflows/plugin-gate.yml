@@ -16,5 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: python -m pip install pytest
+
       - name: Check plugin versions
-        run: python .github/scripts/check_plugin_versions.py package.json package.v2.json
+        run: python .github/scripts/check_plugin_versions.py package.v3.json
+
+      - name: Run V3 contract tests
+        run: python -m pytest tests -q

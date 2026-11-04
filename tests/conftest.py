@@ -1,73 +1,23 @@
-"""pytest 全局引导：按目标选择插件代际，CI 工具测试不加载后端。
+"""pytest 全局引导：契约测试默认纯静态，可选加载 V3 运行时。
 
-``tests/run.py`` 会把 v1/v2 放到独立 pytest 进程中运行；这里据本次目标路径只注入对应
-插件目录，避免同一进程同时加载 ``plugins`` 与 ``plugins.v2`` 的同名包。``tests/ci``
-只校验仓库工具和 workflow，不需要 MoviePilot 运行时。
+设置 ``MOVIEPILOT_PLUGIN_RUNTIME_TESTS=1`` 且后端可用时，才注入 ``plugins.v3/``；
+这样 GitHub Actions 与本地无后端环境也能直接运行全部契约测试。
 """
-
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-# 相对导入本仓薄壳，先定位同级 MoviePilot 后端并加入 ``sys.path``，再复用主程序共享引导。
-from ._bootstrap import (
-    block_real_network,  # noqa: F401  导入即注册主程序共享 autouse 网络守卫
-    prepare_v1_backend,
-    prepare_v2_backend,
-)
-
-
-def _selected_generation(config) -> str:
-    """根据 pytest 本次目标路径判断插件代际，禁止同一进程混跑 v1/v2。"""
-    generations = set()
-    for arg in config.args:
-        file_part = arg.split("::", 1)[0]
-        path = Path(file_part).resolve().as_posix().replace("\\", "/")
-        if "tests/v2" in path:
-            generations.add("v2")
-        elif "tests/v1" in path:
-            generations.add("v1")
-        elif "tests/ci" in path:
-            generations.add("ci")
-    if len(generations) == 1:
-        return next(iter(generations))
-    raise RuntimeError("插件仓单测必须按 tests/run.py 分 v1/v2 独立会话运行，避免同名插件包冲突")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def pytest_configure(config) -> None:
-    """收集用例前隔离 CONFIG_DIR、建表并注入对应代际插件目录。"""
-    generation = _selected_generation(config)
-    if generation == "ci":
+    """按需准备 V3 后端运行时，静态契约测试不触发任何后端导入。"""
+    if os.environ.get("MOVIEPILOT_PLUGIN_RUNTIME_TESTS") != "1":
         return
-    if generation == "v2":
-        prepare_v2_backend()
-    else:
-        prepare_v1_backend()
+    from tests._bootstrap import prepare_v3_backend
 
-
-def _report_session_cleanup_error(session, name: str, err: Exception) -> None:
-    """记录收尾错误；原测试绿色时将会话标记为失败。"""
-    sys.stderr.write(f"\npytest session cleanup failed: {name}: {err!r}\n")
-    if session.exitstatus == 0:
-        session.exitstatus = 1
-
-
-def pytest_sessionfinish(session, exitstatus) -> None:
-    """释放测试过程中创建的消息队列与日志后台线程"""
-    if _selected_generation(session.config) == "ci":
-        return
-
-    try:
-        from app.helper.message import stop_message
-
-        stop_message()
-    except Exception as err:
-        _report_session_cleanup_error(session, "message service", err)
-
-    try:
-        from app.log import LoggerManager
-
-        LoggerManager.shutdown()
-    except Exception as err:
-        _report_session_cleanup_error(session, "logger manager", err)
+    prepare_v3_backend()

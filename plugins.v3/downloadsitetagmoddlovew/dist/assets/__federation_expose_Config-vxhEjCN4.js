@@ -20,6 +20,14 @@ const _sfc_main = {
   initialConfig: {
     type: Object,
     default: () => ({}),
+  },
+  pluginId: {
+    type: String,
+    default: '',
+  },
+  sourcePluginId: {
+    type: String,
+    default: '',
   }
 },
   emits: ['save', 'close', 'switch'],
@@ -38,9 +46,9 @@ const scheduleTypes = ['禁用','计划任务','固定间隔'];
 const intervalUnits = ['分钟','小时'];
 
 // 配置数据，使用默认值和初始配置合并
+// 插件 ID 由宿主注入的 pluginId 提供，不再硬编码类名（支持插件分身）
 const defaultConfig = {
-  id: 'DownloadSiteTagModdlovew',
-  name: '下载任务分类与标签联邦魔改版',
+  name: '下载任务分类与标签魔改VUE版 -dlovew',
 };
 
 // 合并默认配置和初始配置
@@ -94,7 +102,12 @@ function resetForm() {
 // 重置二级分类
 async function resetCategories() {
   try {
-    const response = await props.api.post(`plugin/${config.id}/reset_categories`);
+    const pluginId = props.pluginId || props.sourcePluginId || config.id || '';
+    if (!pluginId) {
+      error.value = '未获取到插件实例 ID，无法重置二级分类';
+      return
+    }
+    const response = await props.api.post(`plugin/${pluginId}/reset_categories`);
     if (response?.all_cat_rename) {
       config.all_cat_rename = [...response.all_cat_rename];
     }
@@ -382,8 +395,8 @@ return (_ctx, _cache) => {
                         }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_text_field, {
-                              modelValue: config._interval_time,
-                              "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config._interval_time) = $event)),
+                              modelValue: config.interval_time,
+                              "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config.interval_time) = $event)),
                               modelModifiers: { number: true },
                               label: "固定间隔",
                               type: "number",

@@ -9,9 +9,9 @@
 
 ---
 
-纯个人使用导向的 MoviePilot V3 插件集合。自己写、自己改、自己用，主要是为了解决我自己部署环境里遇到的实际痛点（下载标签、订阅填充、番剧订阅、混合种子修复）。
+纯个人使用导向的 MoviePilot V3 插件集合。自己写、自己改、自己用，主要是为了解决我自己部署环境里遇到的实际痛点（下载标签、订阅填充、番剧订阅、混合种子修复、媒体同步删除）。
 
-所有插件都基于官方或社区插件的思路魔改而来，保留了明确的上游来源说明；命名统一加 `-dlovew` 后缀以和原版区分，但**插件 ID 保持不变**，方便从其他市场平滑迁移或升级。
+所有插件都基于官方或社区插件的思路魔改而来，保留了明确的上游来源说明；展示名统一加 `-dlovew` 后缀以和原版区分，**插件 ID = 类名 = `package.v3.json` 的键**，目录名为其全小写，避免与上游插件冲突。
 
 > ⚠️ 仓库定位就是自用，不保证通用性、不保证适配你的环境、不接受定制需求。代码开源仅供有相似需求的人参考，出问题请先看日志自己排查。
 
@@ -25,7 +25,7 @@
 | 🔧 | qBittorrent 混合种子修复 -dlovew | 定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。 | 原创自用 |
 | 🗑️ | 媒体文件同步删除 -dlovew | 根据媒体服务器删除事件同步清理整理历史、源文件和下载任务，支持辅种与合集种子处理。 | MediaSyncDel (thsrite) |
 
-> 命名规则：在原版插件名后追加 `-dlovew` 后缀，作者统一为 `dlovew`，插件 ID 维持原版不变，确保升级无碍。
+> 命名规则：展示名追加 `-dlovew` 后缀，作者统一为 `dlovew`；插件 ID 与类名一致，目录名取全小写。
 
 ## 安装
 
@@ -35,12 +35,18 @@
 https://github.com/dlovew/MoviePilot-Plugins
 ```
 
-> 本仓库的插件以 V3 为主（目录 `plugins.v3/` + 索引 `package.v3.json`），`plugins.v2/` 与 `package.v2.json` 仅作为旧版本残留保留，不再主动维护。请确保你的 MoviePilot 已升级到 V3（`>=3.0.0`）。
+> 本仓库**仅支持 MoviePilot V3**：插件源码在 `plugins.v3/`，市场索引为 `package.v3.json`，所有插件声明 `system_version: ">=3.0.0"`。V2 插件目录、索引与文档已全部移除，不再提供任何 V2 兼容内容；根 `package.json` 仅为空占位，避免宿主回退请求时产生 404。
 > 如果你在国内访问 GitHub 受 `GITHUB_TOKEN` 限流影响，可配置代理或自托管的镜像源。
 
 ## 更新
 
-插件市场内直接点击「更新」即可。每个插件的变更日志写在 `package.v3.json` 的 `history` 字段里，安装后也能在插件详情页看到。
+插件市场内直接点击「更新」即可。每个插件的变更日志写在 `package.v3.json` 的 `history` 字段里（键带 `v` 前缀），安装后也能在插件详情页看到。
+
+## 仓库维护
+
+- 索引 `version`、插件类 `plugin_version`、`history` 首项必须三者一致，由 `.github/scripts/check_plugin_versions.py` 在 pre-push / PR / Release 三处校验。
+- 插件开发规范见 `docs/Plugin_Development.md`，仓库结构与发布规则见 `docs/Repository_Guide.md`，常见问题见 `docs/FAQ.md`。
+- 静态契约测试见 `tests/`，本地运行 `python tests/run.py`。
 
 ## 注意事项
 

@@ -1,42 +1,41 @@
-# MoviePilot 插件远程组件示例
+# 下载任务分类与标签魔改 VUE 版 -dlovew
 
-这是 MoviePilot 插件远程组件的示例项目，展示了如何正确配置和开发与主应用兼容的远程组件。本示例实现了三个标准组件：Page（详情页面）、Config（配置页面）和Dashboard（仪表板组件）。
+基于官方 `DownloadSiteTag` 魔改的自用插件，按站点 / 分类为下载任务自动设置 qBittorrent 标签与二级分类。V3 专用实现，使用 Vue 联邦远程组件作为配置页。
 
-## 1. 开发环境准备
+## 目录结构
 
-### 安装依赖
+```text
+downloadsitetagmoddlovew/
+├── __init__.py                     # 插件主类，get_render_mode() 返回 ("vue", "dist/assets")
+├── src/components/Config.vue       # 配置页源码（联邦暴露 ./Config）
+├── vite.config.js / package.json   # 联邦构建工程
+├── dist/assets/                    # 构建产物，必须包含 remoteEntry.js
+├── index.html                      # 本地预览入口
+└── README.md
+```
+
+## 开发
 
 ```bash
-npm install
-# 或
-yarn
+yarn install
+yarn dev      # vite build --watch，配合 PLUGIN_LOCAL_REPO_PATHS 联调
+yarn build    # 生成 dist/assets，提交产物
 ```
 
-### 开发模式运行
+构建要求（见 `MoviePilot-Frontend/docs/module-federation-guide.md`）：
 
-```bash
-npm run dev
-# 或
-yarn dev
-```
+- `format: 'esm'`、`filename: 'remoteEntry.js'`、`build.target: 'esnext'`；
+- 共享 `vue` / `vuetify`，`generate: false`，不得打包 Vuetify 全局样式；
+- 只暴露 `./Config`，产物放在 `dist/assets/`。
 
-## 2. 项目结构
+## V3 配置契约
 
-```
-plugin-component/
-├── src/
-│   ├── components/
-│   │   ├── Page.vue       # 插件详情页面组件
-│   │   ├── Config.vue     # 插件配置页面组件
-│   │   └── Dashboard.vue  # 插件仪表板组件
-│   ├── App.vue            # 本地开发入口组件
-│   └── main.js            # 本地开发入口文件
-├── vite.config.js         # Vite和模块联邦配置
-├── index.html             # 本地开发HTML入口
-└── package.json           # 依赖配置
-```
+- 配置由宿主 `GET plugin/form/{id}` 注入 `initialConfig`，组件不得自行请求 `plugin/{id}/config`；
+- 保存用 `emit('save', config)`，宿主统一 `PUT plugin/{id}`；
+- 调用插件自定义 API 时使用 `api` prop 与 `pluginId`（实例作用域），例如
+  `props.api.post(\`plugin/${props.pluginId}/reset_categories\`)`，不要硬编码类名；
+- 插件后端只注册 `/reset_categories`（`auth: "bear"`），服务 ID 按 `self.__class__.__name__` 动态生成，支持分身。
 
-## 3. 开发指引
+## 已知依赖
 
-- [模块联邦开发指南](../../docs/module-federation-guide.md)
-- [模块联邦问题排查指南](../../docs/federation-troubleshooting.md)。
+分类列表与分类计算使用 V3 宿主 `app.modules.themoviedb.category.CategoryHelper` 的只读兼容门面（该门面在 V3 只读且拒绝写入 `category.yaml`）。若宿主从未来版本移除该门面，需要改用版本化分类策略 API。

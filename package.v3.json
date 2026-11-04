@@ -3,78 +3,83 @@
     "name": "下载任务分类与标签魔改VUE版 -dlovew",
     "description": "按站点/分类为下载任务自动设置 qBittorrent 标签与二级分类。",
     "labels": "下载器,qBittorrent,标签,分类,站点",
-    "version": "2.0.2",
-    "icon": "qBittorrent_A.png",
+    "version": "2.0.3",
+    "icon": "Youtube-dl_B.png",
     "author": "dlovew",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
-      "2.0.2": "修复设置界面 Not Found：移除 Config.vue 中多余的 plugin/{id}/config GET 请求（V3 配置已通过 initialConfig 注入，该端点不存在）",
-      "2.0.1": "修复设置界面 not found 提示：前端远程组件硬编码的插件 ID 已同步为当前类名",
-      "2.0.0": "V3 专用版本：适配统一媒体身份（下载历史 tmdbid 改为 media_source/media_id）；修复 V3 分类策略迁移后分类重命名列表长度不匹配导致的插件加载崩溃（list index out of range）",
-      "1.4.3": "V2 版本：修复插件带来的标签乱码问题",
-      "1.4.2": "V2 版本：原版插件继承维护"
+      "v2.0.3": "V3 专用版本：导入面迁移到 app.sdk.* 与 V3 canonical 路径（分类只读兼容门面保留）；服务 ID 改为动态插件 ID；移除 /config、/save_config 冗余 API 并修复重置二级分类时的 dict 赋值崩溃；回补 Config.vue 源码、修正固定间隔字段绑定与硬编码插件 ID",
+      "v2.0.2": "修复设置界面 Not Found：移除 Config.vue 中多余的 plugin/{id}/config GET 请求（V3 配置已通过 initialConfig 注入，该端点不存在）",
+      "v2.0.1": "修复设置界面 not found 提示：前端远程组件硬编码的插件 ID 已同步为当前类名",
+      "v2.0.0": "V3 专用版本：适配统一媒体身份（下载历史 tmdbid 改为 media_source/media_id）；修复 V3 分类策略迁移后分类重命名列表长度不匹配导致的插件加载崩溃（list index out of range）",
+      "v1.4.3": "V2 版本：修复插件带来的标签乱码问题",
+      "v1.4.2": "V2 版本：原版插件继承维护"
     }
   },
   "SubscribeGroupModdlovew": {
     "name": "订阅规则自动填充魔改版 -dlovew",
     "description": "基于 Seed680 魔改版，按剧集分组规则自动填充订阅的季/集信息并优化数据获取。",
     "labels": "订阅,剧集,自动填充,规则",
-    "version": "3.0.2",
-    "icon": "qBittorrent_A.png",
+    "version": "3.0.3",
+    "icon": "teamwork.png",
     "author": "dlovew",
-    "level": 1,
+    "level": 2,
     "system_version": ">=3.0.0",
     "history": {
-      "3.0.2": "修复 V3 无法加载与运行报错：import 路径迁移到 V3 新结构（app.db.oper.*、app.sdk.events/logging/media、app.domain.meta.streamingplatform）；recognize_media 改用 media_source+media_id（V3 已移除 tmdbid 参数）；修复流媒体平台拼接 include 时的 KeyError；已处理记录兼容 V2 旧 key（type:tmdbid）",
-      "3.0.1": "修复历史记录中文乱码（mojibake）：history content 序列化改为 ensure_ascii=True，防止存储层二次编码损坏",
-      "3.0.0": "V3 专用版本：订阅查询由 list_by_tmdbid 改为 list_by_media_identity 并自行按季过滤；下载历史改用 media_source/media_id",
-      "2.9.1": "V2 版本：统一作者信息、插件名加 -dlovew 后缀以便区分",
-      "2.9.0": "V2 版本：相对原版 2.8.7.3 的魔改，补全流媒体平台识别、修复 VSelect 的 vale 笔误、数据页非 list 兜底"
+      "v3.0.3": "统一导入面（插件基类改用 app.sdk.plugin 稳定入口）与索引元数据（level 对齐 auth_level、图标对齐 plugin_icon）",
+      "v3.0.2": "修复 V3 无法加载与运行报错：import 路径迁移到 V3 新结构（app.db.oper.*、app.sdk.events/logging/media、app.domain.meta.streamingplatform）；recognize_media 改用 media_source+media_id（V3 已移除 tmdbid 参数）；修复流媒体平台拼接 include 时的 KeyError；已处理记录兼容 V2 旧 key（type:tmdbid）",
+      "v3.0.1": "修复历史记录中文乱码（mojibake）：history content 序列化改为 ensure_ascii=True，防止存储层二次编码损坏",
+      "v3.0.0": "V3 专用版本：订阅查询由 list_by_tmdbid 改为 list_by_media_identity 并自行按季过滤；下载历史改用 media_source/media_id",
+      "v2.9.1": "V2 版本：统一作者信息、插件名加 -dlovew 后缀以便区分",
+      "v2.9.0": "V2 版本：相对原版 2.8.7.3 的魔改，补全流媒体平台识别、修复 VSelect 的 vale 笔误、数据页非 list 兜底"
     }
   },
   "RssSubscribedlovew": {
     "name": "自定义订阅番剧魔改版 -dlovew",
     "description": "监听 RSS 自动订阅番剧。按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点/制作组/特效/分辨率精细 include），其余仅通知。",
     "labels": "RSS,订阅,番剧,流媒体,自动订阅",
-    "version": "3.0.2",
-    "icon": "qBittorrent_A.png",
+    "version": "3.0.3",
+    "icon": "rss.png",
     "author": "dlovew",
-    "level": 1,
+    "level": 2,
     "system_version": ">=3.0.0",
     "history": {
-      "3.0.2": "修复数据面板单独删除订阅记录无反应：删除按钮请求的插件 ID 从写死的旧类名 RssSubscribe 改为动态 self.__class__.__name__（当前为 RssSubscribedlovew），否则路由匹配不到当前插件导致删除静默失败",
-      "3.0.1": "V3 适配：import 路径迁移到 V3 新结构（app.runtime.config、app.domain.context/metainfo/tokens、app.db.oper.site、app.application.rss、app.sdk.logging），消除兼容层警告；移除未使用的 DownloadChain",
-      "3.0.0": "V3 专用版本：强订阅改用 media_source/media_id 传参（旧 tmdbid 参数在 V3 会被忽略，导致订阅缺少媒体身份）；插件历史记录补充统一身份字段",
-      "2.2": "V2 版本：基于官方 rssubscribe 2.1 魔改，按流媒体平台(IQ/LINETV)分流处理",
-      "2.1": "V2 版本：官方原版继承"
+      "v3.0.3": "统一导入面与索引元数据（level 对齐 auth_level、图标对齐 plugin_icon）；定时服务 ID 改为动态插件 ID，避免与官方 RssSubscribe 冲突",
+      "v3.0.2": "修复数据面板单独删除订阅记录无反应：删除按钮请求的插件 ID 从写死的旧类名 RssSubscribe 改为动态 self.__class__.__name__（当前为 RssSubscribedlovew），否则路由匹配不到当前插件导致删除静默失败",
+      "v3.0.1": "V3 适配：import 路径迁移到 V3 新结构（app.runtime.config、app.domain.context/metainfo/tokens、app.db.oper.site、app.application.rss、app.sdk.logging），消除兼容层警告；移除未使用的 DownloadChain",
+      "v3.0.0": "V3 专用版本：强订阅改用 media_source/media_id 传参（旧 tmdbid 参数在 V3 会被忽略，导致订阅缺少媒体身份）；插件历史记录补充统一身份字段",
+      "v2.2": "V2 版本：基于官方 rssubscribe 2.1 魔改，按流媒体平台(IQ/LINETV)分流处理",
+      "v2.1": "V2 版本：官方原版继承"
     }
   },
   "QbTorrentFixerdlovew": {
     "name": "qBittorrent 混合种子修复 -dlovew",
     "description": "定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。",
     "labels": "下载器,qBittorrent,订阅修复,混合种子,站点过滤",
-    "version": "3.0.0",
-    "icon": "qBittorrent_A.png",
+    "version": "3.0.1",
+    "icon": "Qbittorrent_A.png",
     "author": "dlovew",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
-      "3.0.0": "V3 专用版本：修复删除合集最后一集时偶发 FileNotFoundError（空目录清理与下载器竞态）——__remove_parent_dir 的 shutil.rmtree 容忍 FileNotFoundError，且清理异常不再中断删种与历史处理；数据面板删除按钮插件 ID 改为动态 self.__class__.__name__",
-      "1.0.6": "V2 版本：修复通知推送仅有标题；「数据」页改为表格展示已处理种子"
+      "v3.0.1": "统一导入面与索引元数据（图标大小写对齐官方图标库）；定时服务 ID 改为动态插件 ID",
+      "v3.0.0": "V3 专用版本：修复删除合集最后一集时偶发 FileNotFoundError（空目录清理与下载器竞态）——__remove_parent_dir 的 shutil.rmtree 容忍 FileNotFoundError，且清理异常不再中断删种与历史处理；数据面板删除按钮插件 ID 改为动态 self.__class__.__name__",
+      "v1.0.6": "V2 版本：修复通知推送仅有标题；「数据」页改为表格展示已处理种子"
     }
   },
   "MediaSyncDeldlovew": {
     "name": "媒体文件同步删除 -dlovew",
     "description": "根据媒体服务器删除事件同步清理整理历史、源文件和下载任务，支持辅种与合集种子处理。",
     "labels": "同步删除,源文件,整理历史,删种,辅种,合集,Emby,Webhook",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "icon": "mediasyncdel.png",
     "author": "dlovew",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
-      "3.0.0": "V3 专用版本（基于 thsrite MediaSyncDel 2.0.2）：修复删除季种合集最后一集时偶发 FileNotFoundError —— 空目录清理与下载器存在竞态，shutil.rmtree 改为容忍 FileNotFoundError，且清理异常不再中断后续删种、整理历史与通知；数据面板删除按钮插件 ID 由硬编码改为动态 self.__class__.__name__"
+      "v3.0.1": "统一导入面与索引元数据（插件基类改用 app.sdk.plugin 稳定入口）",
+      "v3.0.0": "V3 专用版本（基于 thsrite MediaSyncDel 2.0.2）：修复删除季种合集最后一集时偶发 FileNotFoundError —— 空目录清理与下载器存在竞态，shutil.rmtree 改为容忍 FileNotFoundError，且清理异常不再中断后续删种、整理历史与通知；数据面板删除按钮插件 ID 由硬编码改为动态 self.__class__.__name__"
     }
   }
 }

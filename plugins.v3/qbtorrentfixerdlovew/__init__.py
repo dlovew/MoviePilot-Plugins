@@ -7,13 +7,13 @@ import re
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.runtime.config import settings
-from app.sdk.events import eventmanager, Event
-from app.application.downloader import DownloaderHelper
-from app.sdk.logging import logger
-from app.plugins import _PluginBase
 from app.schemas import ServiceInfo
 from app.schemas.types import EventType
+from app.sdk.config import settings
+from app.sdk.events import eventmanager, Event
+from app.sdk.logging import logger
+from app.sdk.plugin import _PluginBase
+from app.sdk.services import DownloaderHelper
 
 
 class QbTorrentFixerdlovew(_PluginBase):
@@ -25,9 +25,9 @@ class QbTorrentFixerdlovew(_PluginBase):
         "而处于混合状态的种子，将其全部文件优先级恢复为正常。"
     )
     # 插件图标
-    plugin_icon = "qBittorrent_A.png"
-    # 插件版本，必须和 package.v2.json 中保持一致
-    plugin_version = "3.0.0"
+    plugin_icon = "Qbittorrent_A.png"
+    # 插件版本，必须和 package.v3.json 中保持一致
+    plugin_version = "3.0.1"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -38,8 +38,6 @@ class QbTorrentFixerdlovew(_PluginBase):
     # 插件可见权限级别
     auth_level = 1
 
-    # 定时服务 id
-    _service_id = "QbTorrentFixerdlovew.Scan"
     # 临时调度器（「立即运行一次」使用）
     _scheduler = None
     # 线程锁
@@ -162,7 +160,7 @@ class QbTorrentFixerdlovew(_PluginBase):
             trigger = CronTrigger.from_crontab("0 * * * *")
         return [
             {
-                "id": self._service_id,
+                "id": f"{self.__class__.__name__}.Scan",
                 "name": "qB 混合种子修复定时扫描",
                 "trigger": trigger,
                 "func": self.scan_and_fix,

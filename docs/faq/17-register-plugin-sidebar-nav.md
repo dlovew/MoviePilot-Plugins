@@ -57,7 +57,7 @@ def get_sidebar_nav(self) -> List[Dict[str, Any]]:
 
 - `nav_key` 不能包含 `/`、`?`、`#`、空格；建议使用 `main`、`settings`、`history`、`my_tool` 这类稳定值。
 - `get_page()` 只影响插件管理里的详情弹窗；要出现在主界面左侧导航，必须实现 `get_sidebar_nav()`。
-- 如果插件依赖这个新前端能力，建议在 `package.json` / `package.v2.json` 中用 `system_version` 限定最低 MoviePilot 版本。
+- 如果插件依赖这个新前端能力，建议在 `package.v3.json` 中用 `system_version` 限定最低 MoviePilot 版本。
 
 ## 2. 前端远程组件要暴露什么？
 

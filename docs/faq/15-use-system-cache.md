@@ -7,7 +7,7 @@
 
 - 1. 使用缓存装饰器：
     ```python
-    from app.core.cache import cached
+    from app.sdk.cache import cached
     
     class MyPlugin(_PluginBase):
         @cached(region="my_plugin", ttl=3600)
@@ -28,7 +28,7 @@
 
 - 2. 使用TTLCache类：
     ```python
-    from app.core.cache import TTLCache
+    from app.sdk.cache import TTLCache
     
     class MyPlugin(_PluginBase):
         def __init__(self):
@@ -55,7 +55,7 @@
 
 - 3. 使用文件缓存后端（适用于大文件缓存）：
     ```python
-    from app.core.cache import FileCache, AsyncFileCache
+    from app.sdk.cache import FileCache, AsyncFileCache
     from pathlib import Path
     
     class MyPlugin(_PluginBase):
@@ -99,7 +99,7 @@
 
 - 4. 直接使用缓存后端（高级用法）：
     ```python
-    from app.core.cache import Cache
+    from app.sdk.cache import Cache
     
     class MyPlugin(_PluginBase):
         def __init__(self):

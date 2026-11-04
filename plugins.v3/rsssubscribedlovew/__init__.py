@@ -11,18 +11,16 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app import schemas
 from app.chain.subscribe import SubscribeChain
-from app.runtime.config import settings
-from app.domain.context import MediaInfo, TorrentInfo, Context
-from app.domain.metainfo import MetaInfo
-from app.domain.meta.streamingplatform import StreamingPlatforms
 from app.db.oper.site import SiteOper
-from app.application.rss import RssHelper
-from app.domain.tokens import Tokens
-from urllib.parse import urlparse
-from app.sdk.logging import logger
-from app.plugins import _PluginBase
+from app.domain.meta.streamingplatform import StreamingPlatforms
 from app.schemas import ExistMediaInfo
 from app.schemas.types import SystemConfigKey, MediaType, NotificationType, MediaSource
+from app.sdk.config import settings
+from app.sdk.logging import logger
+from app.sdk.media import Context, MediaInfo, MetaInfo, Tokens, TorrentInfo
+from app.sdk.network import RssHelper
+from app.sdk.plugin import _PluginBase
+from urllib.parse import urlparse
 
 lock = Lock()
 
@@ -34,8 +32,8 @@ class RssSubscribedlovew(_PluginBase):
     plugin_desc = "定时刷新RSS报文，识别内容后添加订阅或直接下载。"
     # 插件图标
     plugin_icon = "rss.png"
-    # 插件版本
-    plugin_version = "3.0.2"
+    # 插件版本，必须和 package.v3.json 中保持一致
+    plugin_version = "3.0.3"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -155,7 +153,7 @@ class RssSubscribedlovew(_PluginBase):
         """
         if self._enabled and self._cron:
             return [{
-                "id": "RssSubscribe",
+                "id": f"{self.__class__.__name__}.Rss",
                 "name": "自定义订阅服务",
                 "trigger": CronTrigger.from_crontab(self._cron),
                 "func": self.check,
@@ -163,7 +161,7 @@ class RssSubscribedlovew(_PluginBase):
             }]
         elif self._enabled:
             return [{
-                "id": "RssSubscribe",
+                "id": f"{self.__class__.__name__}.Rss",
                 "name": "自定义订阅服务",
                 "trigger": "interval",
                 "func": self.check,

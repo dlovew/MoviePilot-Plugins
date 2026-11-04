@@ -4,26 +4,23 @@ import threading
 from typing import List, Tuple, Dict, Any, Optional
 
 import pytz
-from app.helper.sites import SitesHelper
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.core.config import settings
-from app.core.context import Context
-from app.core.event import eventmanager, Event
-from app.db.downloadhistory_oper import DownloadHistoryOper
 from app.db.models.downloadhistory import DownloadHistory
-from app.modules.themoviedb import CategoryHelper
-from app.helper.downloader import DownloaderHelper
-from app.log import logger
-from app.plugins import _PluginBase
+from app.db.oper.downloadhistory import DownloadHistoryOper
+from app.db.oper.systemconfig import SystemConfigOper
+from app.modules.themoviedb.category import CategoryHelper
 from app.schemas import ServiceInfo
-from app.schemas.types import EventType, MediaType, MediaSource
-from app.utils.string import StringUtils
-from app.db.systemconfig_oper import SystemConfigOper
-from app.schemas.types import SystemConfigKey
-from app.modules.qbittorrent.qbittorrent import Qbittorrent
-from app.core.metainfo import MetaInfo
+from app.schemas.types import EventType, MediaType, MediaSource, SystemConfigKey
+from app.sdk.config import settings
+from app.sdk.events import Event, eventmanager
+from app.sdk.logging import logger
+from app.sdk.media import Context, MetaInfo
+from app.sdk.network import SitesHelper
+from app.sdk.plugin import _PluginBase
+from app.sdk.services import DownloaderHelper
+from app.sdk.utilities import StringUtils
 
 
 class DownloadSiteTagModdlovew(_PluginBase):
@@ -33,8 +30,8 @@ class DownloadSiteTagModdlovew(_PluginBase):
     plugin_desc = "(基于叮叮当原版修改)自动给下载任务分类与打站点标签、剧集名称标签"
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
-    # 插件版本
-    plugin_version = "2.0.2"
+    # 插件版本，必须和 package.v3.json 中保持一致
+    plugin_version = "2.0.3"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -199,10 +196,8 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 self._scheduler.start()
 
     def get_form(self) -> Tuple[Optional[List[dict]], Dict[str, Any]]:
-        # This dict is passed as initialConfig to Config.vue by the host
-        # return None, self._get_config()
-        # logger.debug(f"all_cat_rename:{self._all_cat_rename}")
-        return None, {
+        # Vue 模式只回传配置模型，宿主通过 initialConfig 注入 Config.vue
+        return [], {
             "enable": self._enable,
             "interval": self._interval,
             "interval_cron": self._interval_cron,
@@ -286,46 +281,21 @@ class DownloadSiteTagModdlovew(_PluginBase):
             "tracker_mappings_str": self._tracker_mappings_str
         }
 
-    def _save_config(self, config_payload: dict) -> Dict[str, Any]:
-        # Update instance variables directly from payload, defaulting to current values if key is missing
-        self.load_config(config_payload)
-        # 忽略onlyonce参数
-        config_payload.onlyonce = False
-
-        # Prepare config to save
-        # config_to_save = self._get_config()
-
-        # 保存配置
-        self.update_config(config_payload)
-
-        # 重新初始化插件
-        self.stop_service()
-        self.init_plugin(self.get_config())
-
-        logger.info(f"{self.plugin_name}: 配置已保存并通过 init_plugin 重新初始化。当前内存状态: enable={self._enable}")
-
-        # 返回最终状态
-        return {"message": "配置已成功保存", "saved_config": self._get_config()}
-
     def _reset_categories(self) -> Dict[str, Any]:
-        """
-        重置二级分类
-        """
-        # 重置为默认分类
+        """重置二级分类列表并写回当前配置。"""
         self._all_cat = [*self.category_helper.tv_categorys, *self.category_helper.movie_categorys]
         self._all_cat_rename = self._all_cat
-        # 更新配置
-        config = self.get_config()
-        config.all_cat_rename = self._all_cat_rename
-        config.all_cat = self._all_cat
+        config = self.get_config() or {}
+        if not isinstance(config, dict):
+            config = {}
+        config["all_cat_rename"] = self._all_cat_rename
+        config["all_cat"] = self._all_cat
         self.update_config(config)
 
         logger.info(f"{self.plugin_name}: 二级分类已重置")
-
-        # 返回更新后的配置
         return {
             "all_cat_rename": self._all_cat_rename,
-            "all_cat": self._all_cat
+            "all_cat": self._all_cat,
         }
 
     @property
@@ -369,24 +339,11 @@ class DownloadSiteTagModdlovew(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        pass
+        return []
 
     def get_api(self) -> List[Dict[str, Any]]:
+        # V3 配置读写由宿主负责（GET /form/{id} + PUT /{id}），不再注册 /config、/save_config
         return [
-            {
-                "path": "/config",
-                "endpoint": self._get_config,
-                "methods": ["GET"],
-                "auth": "bear",
-                "summary": "获取当前配置"
-            },
-            {
-                "path": "/save_config",
-                "endpoint": self._save_config,
-                "methods": ["POST"],
-                "auth": "bear",
-                "summary": "保存配置"
-            },
             {
                 "path": "/reset_categories",
                 "endpoint": self._reset_categories,
@@ -413,7 +370,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
             if self._enable_del_tags:
                 # 添加 删除所有未被任何种子使用的标签 任务 每5分钟执行一次
                 tasks.append({
-                    "id": "DeleteUnusedTags",
+                    "id": f"{self.__class__.__name__}.DeleteUnusedTags",
                     "name": "删除下载器中未被使用的标签",
                     "trigger": "interval",
                     "func": self._task_del_unused_tags,
@@ -425,7 +382,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 if self._interval == "固定间隔":
                     if self._interval_unit == "小时":
                         return [{
-                            "id": "DownloadSiteTag",
+                            "id": f"{self.__class__.__name__}.Complement",
                             "name": "补全下载历史的标签与分类",
                             "trigger": "interval",
                             "func": self._complemented_history,
@@ -438,7 +395,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                             self._interval_time = 5
                             logger.info(f"{self.LOG_TAG}启动定时服务: 最小不少于5分钟, 防止执行间隔太短任务冲突")
                         tasks.append({
-                            "id": "DownloadSiteTag",
+                            "id": f"{self.__class__.__name__}.Complement",
                             "name": "补全下载历史的标签与分类",
                             "trigger": "interval",
                             "func": self._complemented_history,
@@ -448,7 +405,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         })
                 else:
                     tasks.append({
-                        "id": "DownloadSiteTag",
+                        "id": f"{self.__class__.__name__}.Complement",
                         "name": "补全下载历史的标签与分类",
                         "trigger": CronTrigger.from_crontab(self._interval_cron),
                         "func": self._complemented_history,
@@ -1033,7 +990,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 f"{self.LOG_TAG}分析下载事件时发生了错误: {str(e)}", exc_info=True)
 
     def get_page(self) -> List[dict]:
-        pass
+        return []
 
     def stop_service(self):
         """
@@ -1050,21 +1007,21 @@ class DownloadSiteTagModdlovew(_PluginBase):
         except Exception as e:
             print(str(e))
 
-    def get_cat_and_tags_by_hash(self, torrent_hash:str, service_instance:Qbittorrent):
+    def get_cat_and_tags_by_hash(self, torrent_hash:str, service_instance: Any):
         torrents_info = service_instance.qbc.torrents_info(torrent_hashes=torrent_hash)
         if torrents_info:
             return  torrents_info[0].get('category'), torrents_info[0].get('tags').split(","),
         else:
             return "", []
 
-    def get_save_path_by_hash(self, torrent_hash:str, service_instance:Qbittorrent):
+    def get_save_path_by_hash(self, torrent_hash:str, service_instance: Any):
         torrents_info = service_instance.qbc.torrents_info(torrent_hashes=torrent_hash)
         if torrents_info:
             return  torrents_info[0].get('save_path')
         else:
             return None
 
-    def get_torrent_name_by_hash(self, torrent_hash:str, service_instance:Qbittorrent):
+    def get_torrent_name_by_hash(self, torrent_hash:str, service_instance: Any):
         torrents_info = service_instance.qbc.torrents_info(torrent_hashes=torrent_hash)
         if torrents_info:
             return  torrents_info[0].get('name')
