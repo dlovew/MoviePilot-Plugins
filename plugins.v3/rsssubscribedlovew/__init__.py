@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.10"
+    plugin_version = "3.1.11"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -478,7 +478,7 @@ class RssSubscribedlovew(_PluginBase):
                 {'component': 'VImg',
                  'props': {
                      'src': str(poster),
-                     'width': 44,
+                     'width': 64,
                      'aspectRatio': '2/3',
                      'cover': True,
                      'class': 'rounded',
