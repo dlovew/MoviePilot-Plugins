@@ -215,3 +215,18 @@ def test_elapsed_text(logic):
     assert "小时" in logic.elapsed_text(logic.now_text(now - datetime.timedelta(hours=5)), now)
     assert "天" in logic.elapsed_text(logic.now_text(now - datetime.timedelta(days=2)), now)
     assert logic.elapsed_text("bad") == "未知"
+
+
+def test_candidate_platform_summary(logic):
+    candidates = [
+        {"platform_token": "LINETV", "team": "UBWEB"},
+        {"platform_token": "Baha", "team": "UBWEB"},
+        {"platform_token": "Baha", "team": "UBWEB"},
+        {"platform_token": "CR", "team": None},
+        {},
+    ]
+    assert logic.candidate_platform_summary(candidates) == (
+        "LINETV-UBWEB、Baha-UBWEB、CR、未知平台"
+    )
+    assert logic.candidate_platform_summary(candidates, limit=2) == "LINETV-UBWEB、Baha-UBWEB"
+    assert logic.candidate_platform_summary([]) == "暂无候选"

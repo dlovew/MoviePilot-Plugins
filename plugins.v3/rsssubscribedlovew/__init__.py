@@ -30,6 +30,7 @@ try:
         DEFAULT_TIER3_PLATFORMS,
         build_include,
         build_tier_rules,
+        candidate_platform_summary,
         choose_best,
         detect_platforms,
         elapsed_text,
@@ -50,6 +51,7 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         DEFAULT_TIER3_PLATFORMS,
         build_include,
         build_tier_rules,
+        candidate_platform_summary,
         choose_best,
         detect_platforms,
         elapsed_text,
@@ -74,7 +76,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.2"
+    plugin_version = "3.1.3"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -418,69 +420,47 @@ class RssSubscribedlovew(_PluginBase):
                 {'component': 'VCardTitle', 'props': {'class': 'text-body-1'},
                  'text': str(group.get('name') or group.get('id') or '-')},
                 {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
-                 'text': ' · '.join(meta_parts)},
-                {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
-                 'text': f"组 ID：{group.get('id') or '-'}　点击选用"},
+                 'text': f"{' · '.join(meta_parts)}　ID {group.get('id') or '-'}"},
             ],
         }
 
     def _runtime_page(self) -> List[dict]:
-        """数据页：状态摘要 + 待选剧集组 + 等待中 + 已决策 + 待重试。"""
+        """数据页：精简的状态摘要 + 待选剧集组 + 等待中 + 决策记录 + 待重试。"""
         state = self.__load_state()
         pending = state['pending']
         history = trim_records(state['history'])
         retry = trim_records(state['retry'])
         last = state.get('last_run') or {}
-        plugin_id = self.__class__.__name__
 
-        summary = [
-            {'component': 'VCardText', 'text': (
-                f"最近运行：{last.get('time') or '尚未运行'}　"
-                f"入池 {last.get('ingested', 0)} 条　结算 {last.get('settled', 0)} 季　"
-                f"窗口 {self._collect_window_hours} 小时　"
-                f"{'试运行中（不会订阅）' if self._dry_run else '正常模式'}"
-            )},
-            {'component': 'VCardText', 'text': (
-                f"等待中 {len(pending)} 季　待选剧集组 "
-                f"{sum(1 for p in pending.values() if p.get('group_status') == 'mismatch' and not p.get('episode_group'))} 季　"
-                f"待重试 {len(retry)} 条　已处理 {len(state['handled'])} 季"
-            )},
-        ]
+        group_pending = sum(1 for item in pending.values()
+                            if item.get('group_status') == 'mismatch'
+                            and not item.get('episode_group'))
         blocks: List[dict] = [{
             'component': 'VCard',
             'props': {'class': 'mb-3'},
             'content': [
-                {'component': 'VCardTitle', 'text': '运行状态'},
-                *summary,
-                {
-                    'component': 'VCardActions',
-                    'content': [
-                        self._action_button('刷新全部 RSS', 'run_check', {}),
-                        self._action_button('结算全部候选', 'settle', {}),
-                    ]
-                },
+                {'component': 'VCardText', 'props': {'class': 'text-caption'}, 'text': (
+                    f"最近运行 {last.get('time') or '尚未运行'}　"
+                    f"入池 {last.get('ingested', 0)}　结算 {last.get('settled', 0)}　"
+                    f"窗口 {self._collect_window_hours}h　"
+                    f"{'试运行' if self._dry_run else '正常'}"
+                )},
+                {'component': 'VCardText', 'props': {'class': 'text-caption'}, 'text': (
+                    f"等待中 {len(pending)}　待选剧集组 {group_pending}　"
+                    f"待重试 {len(retry)}　已处理 {len(state['handled'])}"
+                )},
+                {'component': 'VCardActions', 'content': [
+                    self._action_button('刷新全部 RSS', 'run_check', {}),
+                    self._action_button('结算全部候选', 'settle', {}),
+                ]},
             ]
         }]
 
         group_cards = []
-        group_chips = []
         for key, item in pending.items():
             if item.get('group_status') != 'mismatch' or item.get('episode_group'):
                 continue
             groups = item.get('group_candidates') or []
-            waited = elapsed_text(item.get('first_seen'))
-            group_chips.append({
-                'component': 'VChip',
-                'props': {'class': 'ma-1', 'size': 'small', 'color': 'warning'},
-                'text': f"{item.get('title') or key} · 候选组 {len(groups)} 个 · 已挂起 {waited}",
-            })
-            info = (
-                f"资源侧 {item.get('resource_season_text') or '-'}　"
-                f"TMDB 主季集 {item.get('main_seasons_text') or '-'}　"
-                f"TMDB {item.get('tmdbid') or '-'}　"
-                f"入池 {item.get('first_seen') or '-'}（已挂起 {waited}）　"
-                f"候选组 {len(groups)} 个"
-            )
             group_cards.append({
                 'component': 'VCard',
                 'props': {'class': 'ma-1 pa-2', 'variant': 'outlined'},
@@ -488,12 +468,12 @@ class RssSubscribedlovew(_PluginBase):
                     {'component': 'VCardTitle', 'props': {'class': 'text-subtitle-1'},
                      'text': str(item.get('title') or key)},
                     {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
-                     'text': info},
+                     'text': (f"{item.get('resource_season_text') or '-'} → "
+                              f"TMDB {item.get('main_seasons_text') or '-'}　"
+                              f"已挂起 {elapsed_text(item.get('first_seen'))}")},
                     {'component': 'div', 'props': {'class': 'd-flex flex-wrap mt-2'},
                      'content': [self._group_option_card(key, group) for group in groups[:8]] or [
-                         {'component': 'VCardText', 'text': (
-                             '未探测到候选剧集组：可在设置页「剧集组覆盖」按 媒体ID=组ID 填写后刷新，或直接忽略'
-                         )}
+                         {'component': 'VCardText', 'text': '无候选组，可在设置页填「剧集组覆盖」或忽略'}
                      ]},
                     {'component': 'VCardActions', 'content': [
                         self._action_button('忽略', 'ignore_group', {'key': key}, 'grey'),
@@ -505,12 +485,7 @@ class RssSubscribedlovew(_PluginBase):
                 'component': 'VCard',
                 'props': {'class': 'mb-3'},
                 'content': [
-                    {'component': 'VCardTitle', 'text': f'待选择剧集组（{len(group_cards)}）'},
-                    {'component': 'VCardText', 'props': {'class': 'text-caption'},
-                     'text': ('点击候选组卡片即选用并立即结算；卡片展示组名、编排类型与季/集数，'
-                              '形态与主程序「按剧集组订阅」的选择器一致。')},
-                    {'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
-                     'content': group_chips},
+                    {'component': 'VCardTitle', 'text': f'待选择剧集组（{len(group_cards)}）· 点击卡片选用'},
                     {'component': 'div', 'content': group_cards},
                 ]
             })
@@ -518,60 +493,50 @@ class RssSubscribedlovew(_PluginBase):
         waiting = []
         for key, item in pending.items():
             candidates = item.get('candidates') or []
-            lines = []
-            for candidate in candidates:
-                size = candidate.get('normalized_size')
-                size_text = f"{size / 1024 ** 3:.2f} GiB/集" if isinstance(size, (int, float)) else '体积未知'
-                platform_label = (candidate.get('platform_token')
-                                  or candidate.get('platform') or '未知平台')
-                extra_hits = [hit for hit in (candidate.get('platform_hits') or [])
-                              if hit != platform_label]
-                hits_text = f"（另命中 {'/'.join(extra_hits)}）" if extra_hits else ''
-                lines.append(f"{platform_label} · {size_text}{hits_text} · {candidate.get('title') or ''}")
+            status_text = ('待选剧集组' if item.get('group_status') == 'mismatch'
+                           and not item.get('episode_group') else '等待窗口到期')
             waiting.append({
                 'component': 'VCard',
-                'props': {'class': 'ma-1'},
+                'props': {'class': 'ma-1 pa-2'},
                 'content': [
-                    {'component': 'VCardTitle', 'text': item.get('title') or key},
-                    {'component': 'VCardText', 'text': (
-                        f"入池 {item.get('first_seen')}　共 {len(candidates)} 个候选　"
-                        f"{'待选剧集组' if item.get('group_status') == 'mismatch' and not item.get('episode_group') else '等待窗口到期'}"
-                    )},
-                    {'component': 'VCardText', 'text': '；'.join(lines[:8]) or '暂无候选'},
-                    {
-                        'component': 'VCardActions',
-                        'content': [self._action_button('立即结算', 'settle', {'key': key})]
-                    },
+                    {'component': 'VCardTitle', 'props': {'class': 'text-subtitle-1'},
+                     'text': str(item.get('title') or key)},
+                    {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                     'text': (f"入池 {item.get('first_seen') or '-'}　"
+                              f"共 {len(candidates)} 个候选　{status_text}")},
+                    {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                     'text': f"候选平台 {candidate_platform_summary(candidates)}"},
+                    {'component': 'VCardActions', 'content': [
+                        self._action_button('立即结算', 'settle', {'key': key}),
+                    ]},
                 ]
             })
         blocks.append({
             'component': 'VCard',
             'props': {'class': 'mb-3'},
             'content': [
-                {'component': 'VCardTitle', 'text': '等待中（按等效单集体积择优）'},
+                {'component': 'VCardTitle', 'text': '等待中'},
                 {'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
                  'content': waiting or [{'component': 'VCardText', 'text': '暂无等待中的资源'}]},
             ]
         })
 
         records = []
-        for record in history[:50]:
+        for record in history[:30]:
             records.append({
                 'component': 'VCard',
-                'props': {'class': 'ma-1'},
+                'props': {'class': 'ma-1 pa-2'},
                 'content': [
-                    {'component': 'VCardTitle', 'text': record.get('title') or record.get('key') or '-'},
-                    {'component': 'VCardText', 'text': (
-                        f"{record.get('action') or '-'}　{record.get('platform') or ''}　"
-                        f"{record.get('reason') or record.get('error') or ''}"
-                    )},
-                    {'component': 'VCardText', 'text': record.get('time') or ''},
-                    {
-                        'component': 'VCardActions',
-                        'content': [self._action_button(
-                            '删除记录', 'delete_history', {'key': record.get('id') or ''}, 'error'
-                        )]
-                    },
+                    {'component': 'VCardTitle', 'props': {'class': 'text-subtitle-1'},
+                     'text': str(record.get('title') or record.get('key') or '-')},
+                    {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                     'text': (f"{record.get('time') or '-'}　{record.get('action') or '-'}　"
+                              f"{record.get('platform') or ''}　"
+                              f"{record.get('reason') or record.get('error') or ''}")},
+                    {'component': 'VCardActions', 'content': [
+                        self._action_button('删除', 'delete_history',
+                                            {'key': record.get('id') or ''}, 'error'),
+                    ]},
                 ]
             })
         blocks.append({

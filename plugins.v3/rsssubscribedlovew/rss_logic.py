@@ -326,3 +326,23 @@ def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> st
     if seconds < 86400:
         return f"{seconds / 3600:.1f} 小时"
     return f"{seconds / 86400:.1f} 天"
+
+
+def candidate_platform_summary(candidates: Any, limit: int = 8) -> str:
+    """把候选资源压成一行「平台-制作组」清单，保持数据页简洁。"""
+    parts: List[str] = []
+    seen = set()
+    for candidate in candidates or []:
+        if not isinstance(candidate, dict):
+            continue
+        platform = str(candidate.get('platform_token')
+                       or candidate.get('platform') or '').strip()
+        team = str(candidate.get('team') or '').strip()
+        label = f"{platform}-{team}" if platform and team else (platform or team or '未知平台')
+        if label in seen:
+            continue
+        seen.add(label)
+        parts.append(label)
+        if len(parts) >= max(limit, 1):
+            break
+    return '、'.join(parts) or '暂无候选'
