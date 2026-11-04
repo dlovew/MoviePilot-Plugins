@@ -230,3 +230,16 @@ def test_candidate_platform_summary(logic):
     )
     assert logic.candidate_platform_summary(candidates, limit=2) == "LINETV-UBWEB、Baha-UBWEB"
     assert logic.candidate_platform_summary([]) == "暂无候选"
+
+
+def test_candidate_platform_items_marks_unknown(logic):
+    candidates = [
+        {"platform_token": "LINETV", "team": "UBWEB"},
+        {"platform": "UNKNOWN", "team": "UBWEB"},
+        {"platform_token": "", "team": ""},
+    ]
+    items = logic.candidate_platform_items(candidates)
+    assert [item["label"] for item in items] == [
+        "LINETV-UBWEB", "UNKNOWN-UBWEB", "未知平台"
+    ]
+    assert [item["unknown"] for item in items] == [False, True, True]

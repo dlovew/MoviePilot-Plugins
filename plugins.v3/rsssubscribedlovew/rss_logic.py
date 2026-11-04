@@ -328,9 +328,9 @@ def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> st
     return f"{seconds / 86400:.1f} 天"
 
 
-def candidate_platform_summary(candidates: Any, limit: int = 8) -> str:
-    """把候选资源压成一行「平台-制作组」清单，保持数据页简洁。"""
-    parts: List[str] = []
+def candidate_platform_items(candidates: Any, limit: int = 8) -> List[Dict[str, Any]]:
+    """候选去重成「平台-制作组」标签，并标记未识别平台供前端强调显示。"""
+    items: List[Dict[str, Any]] = []
     seen = set()
     for candidate in candidates or []:
         if not isinstance(candidate, dict):
@@ -338,11 +338,17 @@ def candidate_platform_summary(candidates: Any, limit: int = 8) -> str:
         platform = str(candidate.get('platform_token')
                        or candidate.get('platform') or '').strip()
         team = str(candidate.get('team') or '').strip()
+        unknown = platform.upper() in ('', 'UNKNOWN')
         label = f"{platform}-{team}" if platform and team else (platform or team or '未知平台')
         if label in seen:
             continue
         seen.add(label)
-        parts.append(label)
-        if len(parts) >= max(limit, 1):
+        items.append({'label': label, 'unknown': unknown})
+        if len(items) >= max(limit, 1):
             break
-    return '、'.join(parts) or '暂无候选'
+    return items
+
+
+def candidate_platform_summary(candidates: Any, limit: int = 8) -> str:
+    """把候选资源压成一行「平台-制作组」清单，保持数据页简洁。"""
+    return '、'.join(item['label'] for item in candidate_platform_items(candidates, limit)) or '暂无候选'
