@@ -95,6 +95,12 @@ def plugin_contract_errors(plugin_id: str) -> list[str]:
         if module and any(module.startswith(prefix) for prefix in BANNED_IMPORT_PREFIXES):
             errors.append(f"{plugin_id}: 仍在使用 V2 导入路径 {module}")
 
+    for legacy_id in ("RssSubscribe", "MediaSyncDel", "DownloadSiteTag", "SubscribeGroupMod", "QbTorrentFixer"):
+        if f"plugin/{legacy_id}/" in source:
+            errors.append(
+                f"{plugin_id}: 页面动作仍硬编码旧插件 ID plugin/{legacy_id}/，应使用 self.__class__.__name__"
+            )
+
     if 'return "vue"' in source or "return 'vue'" in source:
         remote_entry = plugin_dir / "dist" / "assets" / "remoteEntry.js"
         if not remote_entry.is_file():

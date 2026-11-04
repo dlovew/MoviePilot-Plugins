@@ -14,7 +14,7 @@ from app.chain.subscribe import SubscribeChain
 from app.db.oper.site import SiteOper
 from app.domain.meta.streamingplatform import StreamingPlatforms
 from app.schemas import ExistMediaInfo
-from app.schemas.types import SystemConfigKey, MediaType, NotificationType, MediaSource
+from app.schemas.types import SystemConfigKey, MediaType, MessageType, MediaSource
 from app.sdk.config import settings
 from app.sdk.logging import logger
 from app.sdk.media import Context, MediaInfo, MetaInfo, Tokens, TorrentInfo
@@ -33,7 +33,7 @@ class RssSubscribedlovew(_PluginBase):
     # 插件图标
     plugin_icon = "rss.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.3"
+    plugin_version = "3.0.4"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -115,27 +115,15 @@ class RssSubscribedlovew(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        """
-        定义远程控制命令
-        :return: 命令关键字、事件、描述、附带数据
-        """
-        pass
+        return []
 
     def get_api(self) -> List[Dict[str, Any]]:
-        """
-        获取插件API
-        [{
-            "path": "/xx",
-            "endpoint": self.xxx,
-            "methods": ["GET", "POST"],
-            "summary": "API说明"
-        }]
-        """
         return [
             {
                 "path": "/delete_history",
                 "endpoint": self.delete_history,
                 "methods": ["GET"],
+                "auth": "bear",
                 "summary": "删除自定义订阅历史记录"
             }
         ]
@@ -458,8 +446,8 @@ class RssSubscribedlovew(_PluginBase):
                     }
                 }
             ]
-        # 数据按时间降序排序
-        historys = sorted(historys, key=lambda x: x.get('time'), reverse=True)
+        # 数据按时间降序排序（统一按字符串比较，避免缺字段或混合类型抛 TypeError）
+        historys = sorted(historys, key=lambda x: str(x.get('time') or ""), reverse=True)
         # 拼装页面
         contents = []
         for history in historys:
@@ -481,8 +469,7 @@ class RssSubscribedlovew(_PluginBase):
                                     'api': f'plugin/{self.__class__.__name__}/delete_history',
                                     'method': 'get',
                                     'params': {
-                                        'key': title,
-                                        'apikey': settings.API_TOKEN
+                                        'key': title
                                     }
                                 }
                             },
@@ -564,12 +551,10 @@ class RssSubscribedlovew(_PluginBase):
         except Exception as e:
             logger.error("退出插件失败：%s" % str(e))
 
-    def delete_history(self, key: str, apikey: str):
+    def delete_history(self, key: str):
         """
-        删除同步历史记录
+        删除同步历史记录（认证由宿主 auth="bear" 负责）
         """
-        if apikey != settings.API_TOKEN:
-            return schemas.Response(success=False, message="API密钥错误")
         # 历史记录
         historys = self.get_data('history')
         if not historys:
@@ -738,7 +723,7 @@ class RssSubscribedlovew(_PluginBase):
                         logger.info(f"{title} 非 IQ/LINETV 资源，发送通知：{notify_msg}")
                         if self._notify:
                             self.post_message(
-                                mtype=NotificationType.Plugin,
+                                mtype=MessageType.Plugin,
                                 title="自定义订阅",
                                 text=notify_msg
                             )
@@ -770,7 +755,7 @@ class RssSubscribedlovew(_PluginBase):
         logger.error(message)
         if self._notify:
             self.post_message(
-                mtype=NotificationType.Plugin,
+                mtype=MessageType.Plugin,
                 title="自定义订阅",
                 text=message
             )

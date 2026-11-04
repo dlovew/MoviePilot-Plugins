@@ -272,3 +272,15 @@ def test_vue_plugin_exposes_both_config_and_page() -> None:
     assert '"./Config"' in remote or "'./Config'" in remote
     assert '"./Page"' in remote or "'./Page'" in remote
     assert (plugin_dir / "src/components/Page.vue").is_file()
+
+
+def test_plugin_pages_are_safe_and_instance_scoped() -> None:
+    """数据页排序需 None 安全，页面动作不得硬编码旧插件 ID。"""
+    from tests.helpers import PLUGINS_DIR
+
+    for plugin_id in plugin_ids():
+        source = (PLUGINS_DIR / plugin_id.lower() / "__init__.py").read_text(encoding="utf-8")
+        assert "key=lambda x: x.get(" not in source, f"{plugin_id} 存在无 None 兜底的排序键"
+        assert "key=lambda x: x.added_date" not in source, f"{plugin_id} 存在无 None 兜底的排序键"
+        for legacy_id in ("RssSubscribe", "MediaSyncDel", "DownloadSiteTag", "SubscribeGroupMod", "QbTorrentFixer"):
+            assert f"plugin/{legacy_id}/" not in source, f"{plugin_id} 页面动作硬编码 {legacy_id}"

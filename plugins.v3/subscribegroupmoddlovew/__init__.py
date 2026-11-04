@@ -22,7 +22,7 @@ class SubscribeGroupModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "teamwork.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.3"
+    plugin_version = "3.0.4"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -501,10 +501,10 @@ class SubscribeGroupModdlovew(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        pass
+        return []
 
     def get_api(self) -> List[Dict[str, Any]]:
-        pass
+        return []
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """
@@ -771,7 +771,7 @@ class SubscribeGroupModdlovew(_PluginBase):
             historys = [historys]
 
         # 按照时间倒序
-        historys = sorted(historys, key=lambda x: x.get("time") or 0, reverse=True)
+        historys = sorted(historys, key=lambda x: str(x.get("time") or ""), reverse=True)
 
         contens = [
             {

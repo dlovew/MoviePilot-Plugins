@@ -31,7 +31,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "2.0.5"
+    plugin_version = "2.0.6"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -723,9 +723,9 @@ class DownloadSiteTagModdlovew(_PluginBase):
         按种子添加时间排序
         """
         if dl_type == "qbittorrent":
-            torrents = sorted(torrents, key=lambda x: x.get("added_on"), reverse=False)
+            torrents = sorted(torrents, key=lambda x: str(x.get("added_on") or ""), reverse=False)
         else:
-            torrents = sorted(torrents, key=lambda x: x.added_date, reverse=False)
+            torrents = sorted(torrents, key=lambda x: str(x.added_date or ""), reverse=False)
         return torrents
 
     @staticmethod

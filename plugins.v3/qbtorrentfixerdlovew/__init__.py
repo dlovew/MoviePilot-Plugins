@@ -27,7 +27,7 @@ class QbTorrentFixerdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Qbittorrent_A.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.1"
+    plugin_version = "3.0.2"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
@@ -169,6 +169,16 @@ class QbTorrentFixerdlovew(_PluginBase):
         ]
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
+        # 下载器配置读取失败不应让整个设置页无法打开，降级为空可选项
+        try:
+            downloader_items = [
+                {"title": config.name, "value": config.name}
+                for config in DownloaderHelper().get_configs().values()
+                if config.type == "qbittorrent"
+            ]
+        except Exception as error:
+            logger.warning(f"读取 qBittorrent 下载器配置失败: {error}")
+            downloader_items = []
         return [
             {
                 "component": "VForm",
@@ -232,11 +242,7 @@ class QbTorrentFixerdlovew(_PluginBase):
                                             "clearable": True,
                                             "model": "downloaders",
                                             "label": "下载器（留空=全部已启用的 qBittorrent）",
-                                            "items": [
-                                                {"title": config.name, "value": config.name}
-                                                for config in DownloaderHelper().get_configs().values()
-                                                if config.type == "qbittorrent"
-                                            ],
+                                            "items": downloader_items,
                                         },
                                     }
                                 ],
@@ -354,7 +360,7 @@ class QbTorrentFixerdlovew(_PluginBase):
                     "props": {"class": "text-center"},
                 }
             ]
-        processed = sorted(self._processed, key=lambda x: x.get("time") or "", reverse=True)
+        processed = sorted(self._processed, key=lambda x: str(x.get("time") or ""), reverse=True)
         rows = []
         for item in processed:
             status = "已修复" if item.get("fixed") else "仅通知"
@@ -659,7 +665,7 @@ class QbTorrentFixerdlovew(_PluginBase):
                     else:
                         history.append(item)
                 # 按时间倒序，仅保留最近 200 条
-                history = sorted(history, key=lambda x: x.get('time') or '', reverse=True)[:200]
+                history = sorted(history, key=lambda x: str(x.get('time') or ''), reverse=True)[:200]
                 self._processed = history
                 self.save_data('processed', history)
             else:

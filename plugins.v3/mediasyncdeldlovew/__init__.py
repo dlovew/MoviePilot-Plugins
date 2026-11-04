@@ -27,7 +27,7 @@ class MediaSyncDeldlovew(_PluginBase):
     # 插件图标
     plugin_icon = "mediasyncdel.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.1"
+    plugin_version = "3.0.2"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -260,7 +260,7 @@ class MediaSyncDeldlovew(_PluginBase):
                                         'component': 'VTextarea',
                                         'props': {
                                             'model': 'library_path',
-                                            'rows': '2',
+                                            'rows': 2,
                                             'label': '媒体库路径映射',
                                             'placeholder': '媒体服务器路径:MoviePilot路径（一行一个）'
                                         }
@@ -413,7 +413,7 @@ class MediaSyncDeldlovew(_PluginBase):
                 }
             ]
         # 数据按时间降序排序
-        historys = sorted(historys, key=lambda x: x.get('del_time'), reverse=True)
+        historys = sorted(historys, key=lambda x: str(x.get('del_time') or ""), reverse=True)
         # 拼装页面
         contents = []
         for history in historys:
