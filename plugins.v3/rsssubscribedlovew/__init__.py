@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.9"
+    plugin_version = "3.1.10"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -491,8 +491,8 @@ class RssSubscribedlovew(_PluginBase):
         }]
 
     @staticmethod
-    def _tmdb_title(title: str, tmdbid: Any) -> dict:
-        """标题链接到 TMDB 剧集页，并附一个季集/剧集组入口，便于人工辨别。"""
+    def _tmdb_title(title: str, tmdbid: Any, with_groups: bool = False) -> dict:
+        """标题链接到 TMDB；只有待选剧集组的场景才额外给出季集/剧集组入口。"""
         try:
             tv_id = int(str(tmdbid or '').strip())
         except (TypeError, ValueError):
@@ -502,21 +502,25 @@ class RssSubscribedlovew(_PluginBase):
                     'props': {'class': 'text-subtitle-1 font-weight-medium'},
                     'text': title}
         base = f'https://www.themoviedb.org/tv/{tv_id}'
+        links = [{
+            'component': 'a',
+            'props': {'href': base, 'target': '_blank', 'rel': 'noopener noreferrer',
+                      'class': ('text-subtitle-1 font-weight-medium text-primary '
+                                'text-decoration-none')},
+            'text': f'{title} ↗',
+        }]
+        if with_groups:
+            links.append({
+                'component': 'a',
+                'props': {'href': f'{base}/episodes', 'target': '_blank',
+                          'rel': 'noopener noreferrer',
+                          'class': 'text-caption text-primary text-decoration-none'},
+                'text': '季集 / 剧集组 ↗',
+            })
         return {
             'component': 'div',
             'props': {'style': 'display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap'},
-            'content': [
-                {'component': 'a',
-                 'props': {'href': base, 'target': '_blank', 'rel': 'noopener noreferrer',
-                           'class': ('text-subtitle-1 font-weight-medium text-primary '
-                                     'text-decoration-none')},
-                 'text': f'{title} ↗'},
-                {'component': 'a',
-                 'props': {'href': f'{base}/episodes?active_nav_item=episode_groups',
-                           'target': '_blank', 'rel': 'noopener noreferrer',
-                           'class': 'text-caption text-primary text-decoration-none'},
-                 'text': '季集 / 剧集组 ↗'},
-            ],
+            'content': links,
         }
 
     @staticmethod
@@ -615,7 +619,8 @@ class RssSubscribedlovew(_PluginBase):
                 'props': {'class': 'mb-2 pa-3', 'variant': 'outlined', 'color': 'warning'},
                 'content': self._with_poster(item.get('poster'), [
                     self._header_row(
-                        self._tmdb_title(str(item.get('title') or key), item.get('tmdbid')),
+                        self._tmdb_title(str(item.get('title') or key), item.get('tmdbid'),
+                                         with_groups=True),
                         [self._action_button('忽略', 'ignore_group', {'key': key}, 'grey')],
                     ),
                     self._text_line(
@@ -650,10 +655,12 @@ class RssSubscribedlovew(_PluginBase):
                             self._action_button('忽略', 'ignore_key', {'key': key}, 'grey'),
                         ],
                     ),
-                    self._text_line(
-                        f"入池 {item.get('first_seen') or '-'}　"
-                        f"共 {len(candidates)} 个候选　{status_text}"
-                    ),
+                    self._text_line('　'.join(filter(None, [
+                        str(item.get('resource_season_text') or ''),
+                        f"入池 {item.get('first_seen') or '-'}",
+                        f"共 {len(candidates)} 个候选",
+                        status_text,
+                    ]))),
                     *self._platform_chips(candidates),
                 ])
             })
@@ -671,11 +678,13 @@ class RssSubscribedlovew(_PluginBase):
                         [self._action_button('删除', 'delete_history',
                                             {'key': record.get('id') or ''}, 'error')],
                     ),
-                    self._text_line(
-                        f"{record.get('time') or '-'}　{record.get('action') or '-'}　"
-                        f"{record.get('platform') or ''}　"
-                        f"{record.get('reason') or record.get('error') or ''}"
-                    ),
+                    self._text_line('　'.join(filter(None, [
+                        str(record.get('resource_season_text') or ''),
+                        str(record.get('time') or '-'),
+                        str(record.get('action') or '-'),
+                        str(record.get('platform') or ''),
+                        str(record.get('reason') or record.get('error') or ''),
+                    ]))),
                 ])
             })
         blocks.append(self._section('决策记录', records, '暂无决策记录'))
@@ -1226,6 +1235,7 @@ class RssSubscribedlovew(_PluginBase):
             'error': error,
             'poster': item.get('poster'),
             'tmdbid': str(item.get('tmdbid') or ''),
+            'resource_season_text': str(item.get('resource_season_text') or ''),
             'time': now_text(),
         })
 
