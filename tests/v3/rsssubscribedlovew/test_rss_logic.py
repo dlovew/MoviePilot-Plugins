@@ -194,3 +194,24 @@ def test_trim_records_limits_and_orders(logic):
         "2026-01-03 00:00:00",
         "2026-01-02 00:00:00",
     ]
+
+
+def test_group_type_label(logic):
+    assert logic.group_type_label(2) == "绝对集数"
+    assert logic.group_type_label(6) == "制作顺序"
+    assert logic.group_type_label(None) == "未知类型"
+    assert "类型" in logic.group_type_label(99)
+
+
+def test_summarize_seasons(logic):
+    assert logic.summarize_seasons({1: list(range(13))}) == "S01(13集)"
+    assert "等 2 季" in logic.summarize_seasons({1: [1], 2: [1]}, limit=1)
+    assert logic.summarize_seasons(None) == "无季集信息"
+
+
+def test_elapsed_text(logic):
+    now = datetime.datetime(2026, 11, 4, 12, 0, 0)
+    assert logic.elapsed_text(logic.now_text(now - datetime.timedelta(minutes=30)), now) == "30 分钟"
+    assert "小时" in logic.elapsed_text(logic.now_text(now - datetime.timedelta(hours=5)), now)
+    assert "天" in logic.elapsed_text(logic.now_text(now - datetime.timedelta(days=2)), now)
+    assert logic.elapsed_text("bad") == "未知"

@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app import schemas
+from app.chain.media import MediaChain
 from app.chain.subscribe import SubscribeChain
 from app.chain.tmdb import TmdbChain
 from app.db.oper.site import SiteOper
@@ -31,11 +32,14 @@ try:
         build_tier_rules,
         choose_best,
         detect_platforms,
+        elapsed_text,
+        group_type_label,
         is_due,
         normalized_size,
         now_text,
         pool_key,
         season_matches,
+        summarize_seasons,
         trim_records,
     )
 except ImportError:  # 兼容按顶层模块加载的宿主
@@ -48,11 +52,14 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         build_tier_rules,
         choose_best,
         detect_platforms,
+        elapsed_text,
+        group_type_label,
         is_due,
         normalized_size,
         now_text,
         pool_key,
         season_matches,
+        summarize_seasons,
         trim_records,
     )
 
@@ -67,7 +74,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.1"
+    plugin_version = "3.1.2"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -379,6 +386,44 @@ class RssSubscribedlovew(_PluginBase):
             }
         }
 
+    def _group_option_card(self, key: str, group: dict) -> dict:
+        """候选剧集组选项卡片：每项自带静态 group_id，点击即选用并结算。
+
+        V3 数据页的 PageRender 不支持 v-model，真正回传选中值的 VSelect 无法提交，
+        因此复刻主程序按剧集组订阅时的「可点击选项」形态。
+        """
+        meta_parts = [str(group.get('type_label') or '未知类型')]
+        if group.get('group_count'):
+            meta_parts.append(f"{group['group_count']} 季")
+        if group.get('episode_count'):
+            meta_parts.append(f"{group['episode_count']} 集")
+        if group.get('season_episodes'):
+            meta_parts.append(f"该季 {group['season_episodes']} 集")
+        return {
+            'component': 'VCard',
+            'props': {
+                'class': 'ma-1 pa-2',
+                'color': 'primary',
+                'variant': 'tonal',
+                'style': 'cursor:pointer;min-width:13rem;max-width:19rem',
+            },
+            'events': {
+                'click': {
+                    'api': f'plugin/{self.__class__.__name__}/set_episode_group',
+                    'method': 'get',
+                    'params': {'key': key, 'group_id': group.get('id')},
+                }
+            },
+            'content': [
+                {'component': 'VCardTitle', 'props': {'class': 'text-body-1'},
+                 'text': str(group.get('name') or group.get('id') or '-')},
+                {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                 'text': ' · '.join(meta_parts)},
+                {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                 'text': f"组 ID：{group.get('id') or '-'}　点击选用"},
+            ],
+        }
+
     def _runtime_page(self) -> List[dict]:
         """数据页：状态摘要 + 待选剧集组 + 等待中 + 已决策 + 待重试。"""
         state = self.__load_state()
@@ -418,29 +463,40 @@ class RssSubscribedlovew(_PluginBase):
         }]
 
         group_cards = []
+        group_chips = []
         for key, item in pending.items():
             if item.get('group_status') != 'mismatch' or item.get('episode_group'):
                 continue
-            buttons = []
-            for group in item.get('group_candidates') or []:
-                buttons.append(self._action_button(
-                    f"选用 {group.get('name') or group.get('id')}",
-                    'set_episode_group',
-                    {'key': key, 'group_id': group.get('id')},
-                ))
-            buttons.append(self._action_button('忽略', 'ignore_group', {'key': key}, 'grey'))
+            groups = item.get('group_candidates') or []
+            waited = elapsed_text(item.get('first_seen'))
+            group_chips.append({
+                'component': 'VChip',
+                'props': {'class': 'ma-1', 'size': 'small', 'color': 'warning'},
+                'text': f"{item.get('title') or key} · 候选组 {len(groups)} 个 · 已挂起 {waited}",
+            })
+            info = (
+                f"资源侧 {item.get('resource_season_text') or '-'}　"
+                f"TMDB 主季集 {item.get('main_seasons_text') or '-'}　"
+                f"TMDB {item.get('tmdbid') or '-'}　"
+                f"入池 {item.get('first_seen') or '-'}（已挂起 {waited}）　"
+                f"候选组 {len(groups)} 个"
+            )
             group_cards.append({
                 'component': 'VCard',
-                'props': {'class': 'ma-1'},
+                'props': {'class': 'ma-1 pa-2', 'variant': 'outlined'},
                 'content': [
-                    {'component': 'VCardTitle', 'text': item.get('title') or key},
-                    {'component': 'VCardText', 'text': (
-                        f"资源侧 S{item.get('season')} 与 TMDB 主季集不匹配；"
-                        f"候选组 {len(item.get('group_candidates') or [])} 个。"
-                        "选用后立即结算；若未探测到候选组，可在设置页「剧集组覆盖」按 媒体ID=组ID 事后填写。"
-                    )},
-                    {'component': 'VCardActions', 'content': buttons or [
-                        {'component': 'VCardText', 'text': '未探测到候选剧集组，请在设置页「剧集组覆盖」按 媒体ID=组ID 填写后刷新，或忽略'}
+                    {'component': 'VCardTitle', 'props': {'class': 'text-subtitle-1'},
+                     'text': str(item.get('title') or key)},
+                    {'component': 'VCardText', 'props': {'class': 'pa-0 px-2 text-caption'},
+                     'text': info},
+                    {'component': 'div', 'props': {'class': 'd-flex flex-wrap mt-2'},
+                     'content': [self._group_option_card(key, group) for group in groups[:8]] or [
+                         {'component': 'VCardText', 'text': (
+                             '未探测到候选剧集组：可在设置页「剧集组覆盖」按 媒体ID=组ID 填写后刷新，或直接忽略'
+                         )}
+                     ]},
+                    {'component': 'VCardActions', 'content': [
+                        self._action_button('忽略', 'ignore_group', {'key': key}, 'grey'),
                     ]},
                 ]
             })
@@ -449,8 +505,13 @@ class RssSubscribedlovew(_PluginBase):
                 'component': 'VCard',
                 'props': {'class': 'mb-3'},
                 'content': [
-                    {'component': 'VCardTitle', 'text': '待选择剧集组'},
-                    {'component': 'div', 'props': {'class': 'd-flex flex-wrap'}, 'content': group_cards},
+                    {'component': 'VCardTitle', 'text': f'待选择剧集组（{len(group_cards)}）'},
+                    {'component': 'VCardText', 'props': {'class': 'text-caption'},
+                     'text': ('点击候选组卡片即选用并立即结算；卡片展示组名、编排类型与季/集数，'
+                              '形态与主程序「按剧集组订阅」的选择器一致。')},
+                    {'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
+                     'content': group_chips},
+                    {'component': 'div', 'content': group_cards},
                 ]
             })
 
@@ -693,33 +754,72 @@ class RssSubscribedlovew(_PluginBase):
                 result[media_key] = group_id
         return result
 
+    @staticmethod
+    def __group_record(raw: Any) -> Optional[dict]:
+        """把 dict 或 MediaEpisodeGroup 对象统一成可展示的候选组记录。"""
+        def pick(name: str) -> Any:
+            if isinstance(raw, dict):
+                return raw.get(name)
+            return getattr(raw, name, None)
+
+        group_id = pick('id')
+        if group_id is None or str(group_id) == '':
+            return None
+
+        def number(name: str) -> int:
+            try:
+                return int(pick(name) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        return {
+            'id': str(group_id),
+            'name': str(pick('name') or group_id),
+            'type_label': group_type_label(pick('type')),
+            'group_count': number('group_count'),
+            'episode_count': number('episode_count'),
+            'description': str(pick('description') or ''),
+        }
+
     def __candidate_episode_groups(self, mediainfo, tmdbid: Any, season: int,
                                    media_id: Any = None) -> List[dict]:
-        """自动探测候选剧集组；探测不到时仍给出设置页里事后填写的覆盖项。"""
-        raw = getattr(mediainfo, 'episode_groups', None) or []
-        groups: List[dict] = []
-        if self._auto_detect_episode_group and isinstance(raw, list):
-            for item in raw:
-                if isinstance(item, dict) and item.get('id'):
-                    groups.append({'id': str(item['id']), 'name': str(item.get('name') or item['id'])})
-        if self._auto_detect_episode_group and not groups and tmdbid:
-            try:
-                fetched = TmdbChain().run_module('tmdb_episode_groups', tmdbid=tmdbid) or []
-                if isinstance(fetched, list):
-                    for item in fetched:
-                        if isinstance(item, dict) and item.get('id'):
-                            groups.append({'id': str(item['id']), 'name': str(item.get('name') or item['id'])})
-            except Exception as err:
-                logger.debug(f"获取剧集组列表失败：{str(err)}")
-        verified = []
-        for group in groups[:10]:
-            try:
-                episodes = TmdbChain().tmdb_episodes(tmdbid, season, episode_group=group['id'])
-            except Exception as err:
-                logger.debug(f"校验剧集组 {group['id']} 失败：{str(err)}")
+        """自动探测候选剧集组，带组名/类型/季数/集数；探测不到时仍列出手动覆盖项。"""
+        raw_groups: List[Any] = []
+        if self._auto_detect_episode_group:
+            source = getattr(mediainfo, 'episode_groups', None) or []
+            if isinstance(source, (list, tuple)):
+                raw_groups = list(source)
+            if not raw_groups and tmdbid:
+                # 与宿主 media/groups/{tmdbid} 一致：按明确身份重新识别取剧集组
+                try:
+                    refreshed = MediaChain().recognize_media(
+                        media_source=MediaSource.TMDB,
+                        media_id=str(tmdbid),
+                        mtype=MediaType.TV,
+                    )
+                    fetched = getattr(refreshed, 'episode_groups', None) or []
+                    if isinstance(fetched, (list, tuple)):
+                        raw_groups = list(fetched)
+                except Exception as err:
+                    logger.debug(f"获取剧集组列表失败：{str(err)}")
+
+        verified: List[dict] = []
+        for raw in raw_groups[:12]:
+            record = self.__group_record(raw)
+            if not record:
                 continue
-            if episodes:
-                verified.append({**group, 'season_episodes': len(episodes)})
+            try:
+                episodes = TmdbChain().tmdb_episodes(
+                    tmdbid, season, episode_group=record['id']
+                )
+            except Exception as err:
+                logger.debug(f"校验剧集组 {record['id']} 失败：{str(err)}")
+                episodes = None
+            # 接口确认该组没有此季时跳过；接口不可用时仍保留，交用户判断
+            if episodes is not None and not episodes:
+                continue
+            record['season_episodes'] = len(episodes or [])
+            verified.append(record)
 
         # 手动覆盖项无条件列出：用户已明确指定，不必依赖宿主剧集组接口可用
         known = str(media_id or '')
@@ -729,7 +829,15 @@ class RssSubscribedlovew(_PluginBase):
                 continue
             if any(group['id'] == group_id for group in verified):
                 continue
-            verified.append({'id': group_id, 'name': f'手动覆盖 {group_id}', 'season_episodes': 0})
+            verified.append({
+                'id': group_id,
+                'name': f'手动覆盖 {group_id}',
+                'type_label': '手动指定',
+                'group_count': 0,
+                'episode_count': 0,
+                'description': '',
+                'season_episodes': 0,
+            })
         return verified
 
     def __ingest(self, state: Dict[str, Any], result: dict, rss_url: str,
@@ -802,6 +910,18 @@ class RssSubscribedlovew(_PluginBase):
             episode_count = max(len(episodes), 1)
         except TypeError:
             episode_count = 1
+        try:
+            episode_numbers = sorted({int(episode) for episode in episodes})
+        except (TypeError, ValueError):
+            episode_numbers = []
+        if len(episode_numbers) > 1:
+            resource_season_text = (f"S{season:02d}E{episode_numbers[0]:02d}"
+                                    f"-E{episode_numbers[-1]:02d}")
+        elif episode_numbers:
+            resource_season_text = f"S{season:02d}E{episode_numbers[0]:02d}"
+        else:
+            resource_season_text = f"S{season:02d}"
+        main_seasons_text = summarize_seasons(getattr(mediainfo, 'seasons', None))
 
         media_source = getattr(mediainfo, 'media_source', None)
         media_source_value = getattr(media_source, 'value', None) or str(media_source or 'tmdb')
@@ -836,6 +956,8 @@ class RssSubscribedlovew(_PluginBase):
                 'year': getattr(mediainfo, 'year', None),
                 'poster': self.__safe_poster(mediainfo),
                 'mtype': getattr(getattr(mediainfo, 'type', None), 'value', None),
+                'resource_season_text': resource_season_text,
+                'main_seasons_text': main_seasons_text,
                 'group_status': status,
                 'episode_group': group_choice,
                 'group_candidates': [],

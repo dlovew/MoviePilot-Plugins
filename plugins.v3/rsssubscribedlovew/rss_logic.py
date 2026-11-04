@@ -273,3 +273,56 @@ def trim_records(records: Sequence[Dict[str, Any]], limit: int = 200) -> List[Di
     except (TypeError, ValueError):
         size = 200
     return ordered[:max(size, 1)]
+
+
+GROUP_TYPE_LABELS = {
+    1: "首播顺序",
+    2: "绝对集数",
+    3: "DVD",
+    4: "数字发行",
+    5: "故事线",
+    6: "制作顺序",
+    7: "电视",
+}
+
+
+def group_type_label(value: Any) -> str:
+    """TMDB 剧集组类型转成可读标签；未知类型原样显示。"""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return str(value or "未知类型")
+    return GROUP_TYPE_LABELS.get(number, f"类型 {number}")
+
+
+def summarize_seasons(seasons: Any, limit: int = 3) -> str:
+    """把 TMDB 主季集信息压成 ``S01(13集)`` 形式的短文本，便于数据页展示。"""
+    if not isinstance(seasons, dict) or not seasons:
+        return "无季集信息"
+    parts = []
+    for number, episodes in list(seasons.items())[:max(limit, 1)]:
+        try:
+            count = int(episodes)
+        except (TypeError, ValueError):
+            count = len(episodes) if isinstance(episodes, (list, tuple, set)) else 0
+        if str(number).isdigit():
+            parts.append(f"S{int(number):02d}({count}集)")
+        else:
+            parts.append(f"{number}({count}集)")
+    if len(seasons) > len(parts):
+        parts.append(f"等 {len(seasons)} 季")
+    return "、".join(parts)
+
+
+def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> str:
+    """入池后已等待多久，用于数据页挂起条目。"""
+    started = parse_timestamp(first_seen)
+    if started is None:
+        return "未知"
+    current = (now or datetime.datetime.now()).replace(tzinfo=None)
+    seconds = max((current - started).total_seconds(), 0)
+    if seconds < 3600:
+        return f"{int(seconds // 60)} 分钟"
+    if seconds < 86400:
+        return f"{seconds / 3600:.1f} 小时"
+    return f"{seconds / 86400:.1f} 天"
