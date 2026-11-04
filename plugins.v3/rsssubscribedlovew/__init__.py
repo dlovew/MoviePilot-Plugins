@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.8"
+    plugin_version = "3.1.9"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -195,6 +195,13 @@ class RssSubscribedlovew(_PluginBase):
                 "methods": ["GET"],
                 "auth": "bear",
                 "summary": "忽略待选剧集组的资源"
+            },
+            {
+                "path": "/ignore_key",
+                "endpoint": self.ignore_key,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "忽略该季，后续同季资源不再处理"
             },
             {
                 "path": "/settle",
@@ -637,10 +644,11 @@ class RssSubscribedlovew(_PluginBase):
                 'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
                 'content': self._with_poster(item.get('poster'), [
                     self._header_row(
-                        {'component': 'div',
-                         'props': {'class': 'text-subtitle-1 font-weight-medium'},
-                         'text': str(item.get('title') or key)},
-                        [self._action_button('立即结算', 'settle', {'key': key})],
+                        self._tmdb_title(str(item.get('title') or key), item.get('tmdbid')),
+                        [
+                            self._action_button('立即结算', 'settle', {'key': key}),
+                            self._action_button('忽略', 'ignore_key', {'key': key}, 'grey'),
+                        ],
                     ),
                     self._text_line(
                         f"入池 {item.get('first_seen') or '-'}　"
@@ -658,9 +666,8 @@ class RssSubscribedlovew(_PluginBase):
                 'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
                 'content': self._with_poster(record.get('poster'), [
                     self._header_row(
-                        {'component': 'div',
-                         'props': {'class': 'text-subtitle-1 font-weight-medium'},
-                         'text': str(record.get('title') or record.get('key') or '-')},
+                        self._tmdb_title(str(record.get('title') or record.get('key') or '-'),
+                                         record.get('tmdbid')),
                         [self._action_button('删除', 'delete_history',
                                             {'key': record.get('id') or ''}, 'error')],
                     ),
@@ -774,7 +781,8 @@ class RssSubscribedlovew(_PluginBase):
         })
         self.__notify_unrecognized(f"{title}（{reason}），已加入待重试列表")
 
-    def __retry_unrecognized(self, state: Dict[str, Any]):
+    def __retry_unrecognized(self, state: Dict[str, Any],
+                             subscribed_media: Optional[Dict[str, Dict[str, Any]]] = None):
         """每个周期重试识别，成功后按正常流程补入候选池。"""
         remaining = []
         for item in state['retry']:
@@ -799,7 +807,8 @@ class RssSubscribedlovew(_PluginBase):
                 'pubdate': item.get('pubdate'),
             }
             self.__ingest(state, rebuilt, item.get('rss_url') or '',
-                          mediainfo=mediainfo, allow_unknown=True)
+                          mediainfo=mediainfo, allow_unknown=True,
+                          subscribed_media=subscribed_media)
         state['retry'] = remaining
 
     # ------------------------------------------------------------------
@@ -936,8 +945,53 @@ class RssSubscribedlovew(_PluginBase):
             logger.debug(f"订阅存在性检查失败，按未订阅处理：{str(err)}")
             return False
 
+    @staticmethod
+    def __load_subscribed_media() -> Dict[str, Dict[str, Any]]:
+        """一次性读出宿主订阅并按媒体身份归并。
+
+        宿主 ``exists`` 是 ``season + episode_group`` 精确匹配，按剧集组建立的
+        订阅（episode_group 非空、季号体系也不同于 TMDB 主季）永远匹配不上，
+        导致同一部剧被反复要求选组。这里补一层媒体身份维度的判重。
+        """
+        try:
+            from app.db.oper.subscribe import SubscribeOper
+            subscribes = SubscribeOper().list() or []
+        except Exception as err:
+            logger.debug(f"读取订阅列表失败，跳过媒体级判重：{str(err)}")
+            return {}
+        result: Dict[str, Dict[str, Any]] = {}
+        for record in subscribes:
+            source = getattr(record, 'media_source', None)
+            source_value = getattr(source, 'value', None) or str(source or '')
+            media_id = str(getattr(record, 'media_id', '') or '')
+            if not source_value or not media_id:
+                continue
+            entry = result.setdefault(f"{source_value}:{media_id}",
+                                      {'episode_groups': set(), 'seasons': set()})
+            group = getattr(record, 'episode_group', None)
+            if group:
+                entry['episode_groups'].add(str(group))
+            season = getattr(record, 'season', None)
+            if isinstance(season, int):
+                entry['seasons'].add(season)
+        return result
+
+    @staticmethod
+    def __covered_by_group_subscription(subscribed: Dict[str, Dict[str, Any]],
+                                        media_source: Any, media_id: Any) -> bool:
+        """该媒体已有「按剧集组」订阅时视为已处理。
+
+        剧集组订阅的季号不属于 TMDB 主季体系，插件无法可靠判断资源属于哪一季，
+        继续入池只会重复提示选组，因此保守跳过整部剧。
+        """
+        if not subscribed:
+            return False
+        entry = subscribed.get(f"{media_source}:{media_id}")
+        return bool(entry and entry.get('episode_groups'))
+
     def __ingest(self, state: Dict[str, Any], result: dict, rss_url: str,
-                 mediainfo=None, allow_unknown: bool = False):
+                 mediainfo=None, allow_unknown: bool = False,
+                 subscribed_media: Optional[Dict[str, Dict[str, Any]]] = None):
         """处理单条 RSS 资源：过滤 → 识别 → 归键 → 入池。
 
         ``allow_unknown`` 仅用于重试队列：TMDB 季集信息仍缺失时按主季订阅，
@@ -1047,6 +1101,14 @@ class RssSubscribedlovew(_PluginBase):
             if key not in state['handled']:
                 state['handled'].append(key)
             logger.info(f"{getattr(mediainfo, 'title_year', None) or title} 已存在订阅，跳过入池")
+            return
+        # 该媒体已有按剧集组的订阅：季号体系不同，无法可靠判断归属，整部跳过
+        if not item and self.__covered_by_group_subscription(
+                subscribed_media or {}, media_source_value, media_id):
+            if key not in state['handled']:
+                state['handled'].append(key)
+            logger.info(f"{getattr(mediainfo, 'title_year', None) or title} "
+                        f"已有剧集组订阅，跳过入池")
             return
         if not item:
             item = {
@@ -1163,6 +1225,7 @@ class RssSubscribedlovew(_PluginBase):
             'subscribe_id': str(subscribe_id) if subscribe_id else '',
             'error': error,
             'poster': item.get('poster'),
+            'tmdbid': str(item.get('tmdbid') or ''),
             'time': now_text(),
         })
 
@@ -1246,9 +1309,12 @@ class RssSubscribedlovew(_PluginBase):
         except Exception as err:
             logger.error(f"重刷未识别平台失败：{str(err)}")
 
+        # 本轮只读一次宿主订阅，供入池判重（含按剧集组的订阅）
+        subscribed_media = self.__load_subscribed_media()
+
         if self._retry_unrecognized:
             try:
-                self.__retry_unrecognized(state)
+                self.__retry_unrecognized(state, subscribed_media)
             except Exception as err:
                 logger.error(f"重试识别队列失败：{str(err)}")
 
@@ -1265,7 +1331,8 @@ class RssSubscribedlovew(_PluginBase):
             ingested = 0
             for result in results:
                 try:
-                    self.__ingest(state, dict(result), url)
+                    self.__ingest(state, dict(result), url,
+                                  subscribed_media=subscribed_media)
                     ingested += 1
                 except Exception as err:
                     logger.error(f"处理 RSS 条目出错：{str(err)} - {traceback.format_exc()}")
@@ -1319,6 +1386,19 @@ class RssSubscribedlovew(_PluginBase):
         self.__finalize(state, key, item, 'ignored', reason='手动忽略剧集组资源')
         self.__save_state(state)
         return schemas.Response(success=True, message="已忽略")
+
+    def ignore_key(self, key: str):
+        """忽略该季：移出候选池并写入已处理，后续同季资源不再入池。"""
+        state = self.__load_state()
+        item = state['pending'].get(key)
+        if not item:
+            return schemas.Response(success=False, message="未找到待处理资源")
+        if key not in state['handled']:
+            state['handled'].append(key)
+        self.__record(state, item, 'ignored', reason='手动忽略该季，后续不再处理')
+        state['pending'].pop(key, None)
+        self.__save_state(state)
+        return schemas.Response(success=True, message="已忽略，后续同季资源不再处理")
 
     def settle(self, key: str = ""):
         state = self.__load_state()
