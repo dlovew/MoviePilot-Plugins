@@ -31,7 +31,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "2.0.4"
+    plugin_version = "2.0.5"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -281,6 +281,38 @@ class DownloadSiteTagModdlovew(_PluginBase):
             "tracker_mappings_str": self._tracker_mappings_str
         }
 
+    def _get_status(self) -> Dict[str, Any]:
+        """数据页概览：返回当前生效配置的只读摘要。"""
+        try:
+            downloaders = [
+                item.get("title") for item in (self._all_downloaders or [])
+                if isinstance(item, dict) and item.get("title")
+            ]
+        except Exception as error:
+            logger.warning(f"{self.LOG_TAG}读取下载器列表失败: {error}")
+            downloaders = []
+        selected = self._downloaders or []
+        if not isinstance(selected, (list, tuple, set)):
+            selected = [selected]
+        return {
+            "enabled": bool(self._enable),
+            "interval": self._interval,
+            "interval_cron": self._interval_cron,
+            "interval_time": self._interval_time,
+            "interval_unit": self._interval_unit,
+            "features": {
+                "站点标签": bool(self._enable_tag),
+                "剧名标签": bool(self._enable_media_tag),
+                "自动分类": bool(self._enable_category),
+                "清理未使用标签": bool(self._enable_del_tags),
+            },
+            "downloaders": downloaders,
+            "selected_downloaders": [str(item) for item in selected],
+            "category_count": len(self._all_cat or []),
+            "rename_type": "按路径自定义分类" if self._rename_type else "二级分类重命名",
+            "tracker_rule_count": len(self._tracker_mappings or {}),
+        }
+
     def _reset_categories(self) -> Dict[str, Any]:
         """重置二级分类列表并写回当前配置。"""
         self._all_cat = [*self.category_helper.tv_categorys, *self.category_helper.movie_categorys]
@@ -344,6 +376,13 @@ class DownloadSiteTagModdlovew(_PluginBase):
     def get_api(self) -> List[Dict[str, Any]]:
         # V3 配置读写由宿主负责（GET /form/{id} + PUT /{id}），不再注册 /config、/save_config
         return [
+            {
+                "path": "/status",
+                "endpoint": self._get_status,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "获取数据页状态概览"
+            },
             {
                 "path": "/reset_categories",
                 "endpoint": self._reset_categories,

@@ -261,3 +261,14 @@ def test_no_bump_needed_for_non_plugin_changes(tmp_path: Path) -> None:
     _commit(repo, "docs only")
     result = _bump_check(repo)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_vue_plugin_exposes_both_config_and_page() -> None:
+    """vue 渲染模式必须同时暴露 ./Config 与 ./Page，否则数据页会显示组件加载错误。"""
+    from tests.helpers import PLUGINS_DIR
+
+    plugin_dir = PLUGINS_DIR / "downloadsitetagmoddlovew"
+    remote = (plugin_dir / "dist/assets/remoteEntry.js").read_text(encoding="utf-8")
+    assert '"./Config"' in remote or "'./Config'" in remote
+    assert '"./Page"' in remote or "'./Page'" in remote
+    assert (plugin_dir / "src/components/Page.vue").is_file()

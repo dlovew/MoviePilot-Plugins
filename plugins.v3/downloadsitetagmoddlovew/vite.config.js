@@ -9,7 +9,9 @@ export default defineConfig({
       name: 'DownloadSiteTagModdlovew',
       filename: 'remoteEntry.js',
       exposes: {
-        './Config': './src/components/Config.vue'
+        // V3 宿主在 vue 模式下：设置页加载 ./Config，数据页加载 ./Page，两者都必须暴露
+        './Config': './src/components/Config.vue',
+        './Page': './src/components/Page.vue'
       },
       shared: {
         vue: {

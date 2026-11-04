@@ -7,7 +7,8 @@
 ```text
 downloadsitetagmoddlovew/
 ├── __init__.py                     # 插件主类，get_render_mode() 返回 ("vue", "dist/assets")
-├── src/components/Config.vue       # 配置页源码（联邦暴露 ./Config）
+├── src/components/Config.vue       # 设置页源码（联邦暴露 ./Config）
+├── src/components/Page.vue         # 数据页源码（联邦暴露 ./Page）
 ├── src/main.js                     # 本地预览入口，仅 npm run preview 使用
 ├── vite.config.js / package.json   # 联邦构建工程
 ├── dist/assets/                    # 构建产物，必须包含 remoteEntry.js
@@ -36,9 +37,10 @@ yarn build                          # 重新生成 dist/，提交产物
 
 - 配置由宿主 `GET plugin/form/{id}` 注入 `initialConfig`，组件不得自行请求 `plugin/{id}/config`；
 - 保存用 `emit('save', config)`，宿主统一 `PUT plugin/{id}`；
+- **`vue` 渲染模式下宿主固定加载两个组件**：设置页 `./Config`、数据页 `./Page`。缺少 `./Page` 会让数据页显示「无法加载组件」；`Page.vue` 通过 `pluginId` 调用 `/status` 展示运行状态；
 - 调用插件自定义 API 时使用 `api` prop 与 `pluginId`（实例作用域），例如
-  `props.api.post(\`plugin/${props.pluginId}/reset_categories\`)`，不要硬编码类名；
-- 插件后端只注册 `/reset_categories`（`auth: "bear"`），服务 ID 按 `self.__class__.__name__` 动态生成，支持分身。
+  `props.api.get(\`plugin/${props.pluginId}/status\`)`，不要硬编码类名；
+- 插件后端注册 `/status`（GET，数据页概览）与 `/reset_categories`（POST，重置二级分类），均声明 `auth: "bear"`；服务 ID 按 `self.__class__.__name__` 动态生成，支持分身。
 
 ## 已知依赖
 

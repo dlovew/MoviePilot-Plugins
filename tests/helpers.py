@@ -96,10 +96,19 @@ def plugin_contract_errors(plugin_id: str) -> list[str]:
             errors.append(f"{plugin_id}: 仍在使用 V2 导入路径 {module}")
 
     if 'return "vue"' in source or "return 'vue'" in source:
-        if not (plugin_dir / "dist" / "assets" / "remoteEntry.js").is_file():
+        remote_entry = plugin_dir / "dist" / "assets" / "remoteEntry.js"
+        if not remote_entry.is_file():
             errors.append(f"{plugin_id}: Vue 模式缺少 dist/assets/remoteEntry.js")
+        else:
+            # V3 宿主在 vue 模式下：设置页加载 ./Config，数据页加载 ./Page，缺一即报错
+            remote_text = remote_entry.read_text(encoding="utf-8")
+            for expose in ("./Config", "./Page"):
+                if f'"{expose}"' not in remote_text and f"'{expose}'" not in remote_text:
+                    errors.append(f"{plugin_id}: dist/assets/remoteEntry.js 未暴露 {expose}")
         if not (plugin_dir / "src" / "components" / "Config.vue").is_file():
             errors.append(f"{plugin_id}: Vue 模式缺少可维护的 src/components/Config.vue 源码")
+        if not (plugin_dir / "src" / "components" / "Page.vue").is_file():
+            errors.append(f"{plugin_id}: Vue 模式缺少可维护的 src/components/Page.vue 源码")
     return errors
 
 
