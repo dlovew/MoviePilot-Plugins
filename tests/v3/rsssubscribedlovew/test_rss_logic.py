@@ -243,3 +243,28 @@ def test_candidate_platform_items_marks_unknown(logic):
         "LINETV-UBWEB", "UNKNOWN-UBWEB", "未知平台"
     ]
     assert [item["unknown"] for item in items] == [False, True, True]
+
+
+def test_candidate_platform_items_shows_size_and_keeps_smallest(logic):
+    gib = 1024 ** 3
+    candidates = [
+        {"platform_token": "LINETV", "team": "UBWEB",
+         "normalized_size": 2 * gib, "title": "LINETV big"},
+        {"platform_token": "LINETV", "team": "UBWEB",
+         "normalized_size": 1.2 * gib, "title": "LINETV small"},
+        {"platform_token": "Baha", "team": "UBWEB",
+         "normalized_size": 1.5 * gib, "title": "Baha item"},
+        {"platform": "UNKNOWN", "team": "UBWEB",
+         "normalized_size": 3 * gib, "title": "Unknown Platform Title"},
+    ]
+    items = logic.candidate_platform_items(candidates)
+    assert [item["label"] for item in items] == [
+        "LINETV-UBWEB", "Baha-UBWEB", "UNKNOWN-UBWEB"
+    ]
+    assert items[0]["size_text"] == "1.20 GiB/集"
+    assert items[0]["title"] == "LINETV small"
+    assert items[2]["unknown"] is True
+    assert items[2]["title"] == "Unknown Platform Title"
+    assert logic.candidate_platform_summary(candidates) == (
+        "LINETV-UBWEB、Baha-UBWEB、UNKNOWN-UBWEB"
+    )

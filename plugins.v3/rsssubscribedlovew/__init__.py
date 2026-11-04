@@ -76,7 +76,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.4"
+    plugin_version = "3.1.5"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -488,14 +488,16 @@ class RssSubscribedlovew(_PluginBase):
 
     @staticmethod
     def _platform_chips(candidates: List[dict]) -> List[dict]:
-        """候选平台用小标签展示；未识别平台用警示色强调。"""
+        """候选平台标签带等效体积；未识别平台警示显示并列出可复制的原始标题。"""
         items = candidate_platform_items(candidates)
         if not items:
             return [{'component': 'div', 'props': {'class': 'text-caption'},
                      'text': '暂无候选'}]
         chips = []
+        unknown_titles = []
         for item in items:
             unknown = bool(item.get('unknown'))
+            text = f"{item['label']} · {item.get('size_text') or '体积未知'}"
             chips.append({
                 'component': 'VChip',
                 'props': {
@@ -504,10 +506,27 @@ class RssSubscribedlovew(_PluginBase):
                     'color': 'warning' if unknown else 'primary',
                     'variant': 'flat' if unknown else 'tonal',
                 },
-                'text': f"⚠ {item['label']}" if unknown else item['label'],
+                'text': f"⚠ {text}" if unknown else text,
             })
-        return [{'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
-                 'content': chips}]
+            if unknown and item.get('title'):
+                unknown_titles.append(item['title'])
+
+        blocks = [{'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
+                   'content': chips}]
+        if unknown_titles:
+            blocks.append({
+                'component': 'div',
+                'props': {'class': 'text-caption text-medium-emphasis mt-1'},
+                'content': [
+                    {'component': 'div',
+                     'text': '未识别平台：复制下方标题里的缩写，填入设置页「自定义平台缩写」'},
+                    *[{'component': 'div',
+                       'props': {'style': ('user-select:all;word-break:break-all;'
+                                           'margin-top:0.25rem')},
+                       'text': title} for title in unknown_titles[:3]],
+                ],
+            })
+        return blocks
 
     def _runtime_page(self) -> List[dict]:
         """数据页：全宽单列布局，状态摘要 + 待选剧集组 + 等待中 + 决策记录 + 待重试。"""

@@ -329,9 +329,12 @@ def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> st
 
 
 def candidate_platform_items(candidates: Any, limit: int = 8) -> List[Dict[str, Any]]:
-    """候选去重成「平台-制作组」标签，并标记未识别平台供前端强调显示。"""
-    items: List[Dict[str, Any]] = []
-    seen = set()
+    """按「平台-制作组」归并候选，附带等效体积与原始标题。
+
+    同一标签保留等效单集体积最小的那条（与结算选优一致）；未识别平台标记
+    ``unknown`` 并带上原始 RSS 标题，便于复制标题里的缩写补充平台词表。
+    """
+    grouped: Dict[str, Dict[str, Any]] = {}
     for candidate in candidates or []:
         if not isinstance(candidate, dict):
             continue
@@ -340,12 +343,26 @@ def candidate_platform_items(candidates: Any, limit: int = 8) -> List[Dict[str, 
         team = str(candidate.get('team') or '').strip()
         unknown = platform.upper() in ('', 'UNKNOWN')
         label = f"{platform}-{team}" if platform and team else (platform or team or '未知平台')
-        if label in seen:
-            continue
-        seen.add(label)
-        items.append({'label': label, 'unknown': unknown})
-        if len(items) >= max(limit, 1):
-            break
+        size = candidate.get('normalized_size')
+        size_value = float(size) if isinstance(size, (int, float)) else None
+        size_text = (f"{size_value / 1024 ** 3:.2f} GiB/集"
+                     if size_value is not None else '体积未知')
+        record = {
+            'label': label,
+            'unknown': unknown,
+            'size_text': size_text,
+            'title': str(candidate.get('title') or ''),
+            '_size': size_value,
+        }
+        existing = grouped.get(label)
+        if existing is None:
+            grouped[label] = record
+        elif record['_size'] is not None and (
+                existing['_size'] is None or record['_size'] < existing['_size']):
+            grouped[label] = record
+    items = []
+    for record in list(grouped.values())[:max(limit, 1)]:
+        items.append({key: value for key, value in record.items() if key != '_size'})
     return items
 
 
