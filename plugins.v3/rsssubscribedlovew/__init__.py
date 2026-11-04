@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.7"
+    plugin_version = "3.1.8"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -460,6 +460,30 @@ class RssSubscribedlovew(_PluginBase):
         return {'component': 'div', 'props': {'class': css}, 'text': text}
 
     @staticmethod
+    def _with_poster(poster: Any, content: List[dict]) -> List[dict]:
+        """左侧封面 + 右侧内容；没有海报时保持原来的纯文本布局。"""
+        if not poster:
+            return content
+        return [{
+            'component': 'div',
+            'props': {'style': 'display:flex;gap:0.75rem;align-items:flex-start'},
+            'content': [
+                {'component': 'VImg',
+                 'props': {
+                     'src': str(poster),
+                     'width': 44,
+                     'aspectRatio': '2/3',
+                     'cover': True,
+                     'class': 'rounded',
+                     'style': 'flex:0 0 auto',
+                 }},
+                {'component': 'div',
+                 'props': {'style': 'flex:1 1 auto;min-width:0'},
+                 'content': content},
+            ],
+        }]
+
+    @staticmethod
     def _tmdb_title(title: str, tmdbid: Any) -> dict:
         """标题链接到 TMDB 剧集页，并附一个季集/剧集组入口，便于人工辨别。"""
         try:
@@ -582,7 +606,7 @@ class RssSubscribedlovew(_PluginBase):
             group_rows.append({
                 'component': 'VCard',
                 'props': {'class': 'mb-2 pa-3', 'variant': 'outlined', 'color': 'warning'},
-                'content': [
+                'content': self._with_poster(item.get('poster'), [
                     self._header_row(
                         self._tmdb_title(str(item.get('title') or key), item.get('tmdbid')),
                         [self._action_button('忽略', 'ignore_group', {'key': key}, 'grey')],
@@ -596,7 +620,7 @@ class RssSubscribedlovew(_PluginBase):
                      'content': [self._group_option_card(key, group) for group in groups[:8]] or [
                          self._text_line('无候选组，可在设置页填「剧集组覆盖」或忽略')
                      ]},
-                ]
+                ])
             })
         if group_rows:
             blocks.append(self._section(
@@ -611,7 +635,7 @@ class RssSubscribedlovew(_PluginBase):
             waiting.append({
                 'component': 'VCard',
                 'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
-                'content': [
+                'content': self._with_poster(item.get('poster'), [
                     self._header_row(
                         {'component': 'div',
                          'props': {'class': 'text-subtitle-1 font-weight-medium'},
@@ -623,7 +647,7 @@ class RssSubscribedlovew(_PluginBase):
                         f"共 {len(candidates)} 个候选　{status_text}"
                     ),
                     *self._platform_chips(candidates),
-                ]
+                ])
             })
         blocks.append(self._section('等待中', waiting, '暂无等待中的资源'))
 
@@ -632,7 +656,7 @@ class RssSubscribedlovew(_PluginBase):
             records.append({
                 'component': 'VCard',
                 'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
-                'content': [
+                'content': self._with_poster(record.get('poster'), [
                     self._header_row(
                         {'component': 'div',
                          'props': {'class': 'text-subtitle-1 font-weight-medium'},
@@ -645,7 +669,7 @@ class RssSubscribedlovew(_PluginBase):
                         f"{record.get('platform') or ''}　"
                         f"{record.get('reason') or record.get('error') or ''}"
                     ),
-                ]
+                ])
             })
         blocks.append(self._section('决策记录', records, '暂无决策记录'))
 
