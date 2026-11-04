@@ -39,6 +39,7 @@ try:
         normalized_size,
         now_text,
         pool_key,
+        reidentify_platforms,
         season_matches,
         summarize_seasons,
         trim_records,
@@ -60,6 +61,7 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         normalized_size,
         now_text,
         pool_key,
+        reidentify_platforms,
         season_matches,
         summarize_seasons,
         trim_records,
@@ -76,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.5"
+    plugin_version = "3.1.6"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -539,6 +541,8 @@ class RssSubscribedlovew(_PluginBase):
         group_pending = sum(1 for item in pending.values()
                             if item.get('group_status') == 'mismatch'
                             and not item.get('episode_group'))
+        reidentified = int(last.get('reidentified') or 0)
+        reidentified_text = f"　重识别 {reidentified}" if reidentified else ''
         blocks: List[dict] = [{
             'component': 'VCard',
             'props': {'class': 'mb-3 pa-2', 'variant': 'tonal'},
@@ -552,6 +556,7 @@ class RssSubscribedlovew(_PluginBase):
                 self._text_line(
                     f"等待中 {len(pending)}　待选剧集组 {group_pending}　"
                     f"待重试 {len(retry)}　已处理 {len(state['handled'])}"
+                    f"{reidentified_text}"
                 ),
                 {'component': 'VCardActions', 'content': [
                     self._action_button('刷新全部 RSS', 'run_check', {}),
@@ -1178,6 +1183,16 @@ class RssSubscribedlovew(_PluginBase):
             logger.error(f"添加订阅异常：{str(err)} - {traceback.format_exc()}")
             return None, 'exception', str(err)
 
+    def __refresh_unknown_platforms(self, state: Dict[str, Any]) -> int:
+        """按当前平台词表重刷已有 UNKNOWN 候选；已识别平台保持不变。"""
+        tokens = self.__platform_tokens()
+        refreshed = 0
+        for item in state['pending'].values():
+            refreshed += reidentify_platforms(item.get('candidates') or [], tokens)
+        if refreshed:
+            logger.info(f"按当前平台词表重新识别 {refreshed} 条 UNKNOWN 候选")
+        return refreshed
+
     def check(self):
         """刷新全部 RSS → 入池 → 结算到期候选 → 持久化。单个源失败不影响其它源。"""
         if not self._address:
@@ -1190,6 +1205,13 @@ class RssSubscribedlovew(_PluginBase):
         state['last_run']['time'] = now_text()
         state['last_run']['ingested'] = 0
         state['last_run']['settled'] = 0
+        state['last_run']['reidentified'] = 0
+
+        # 用户补充自定义平台缩写后，点刷新即可只重刷已有的 UNKNOWN 候选
+        try:
+            state['last_run']['reidentified'] = self.__refresh_unknown_platforms(state)
+        except Exception as err:
+            logger.error(f"重刷未识别平台失败：{str(err)}")
 
         if self._retry_unrecognized:
             try:

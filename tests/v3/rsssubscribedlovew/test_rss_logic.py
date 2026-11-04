@@ -268,3 +268,28 @@ def test_candidate_platform_items_shows_size_and_keeps_smallest(logic):
     assert logic.candidate_platform_summary(candidates) == (
         "LINETV-UBWEB、Baha-UBWEB、UNKNOWN-UBWEB"
     )
+
+
+def test_reidentify_platforms_only_touches_unknown(logic):
+    candidates = [
+        {"platform": "LINETV", "platform_token": "LINETV",
+         "title": "已识别 S01E01 1080p ABEMA WEB-DL"},
+        {"platform": "UNKNOWN", "platform_token": "",
+         "title": "某番 S01E01 1080p ABEMA WEB-DL"},
+        {"platform": "UNKNOWN", "platform_token": "",
+         "title": "另一番 S01E01 1080p CR WEB-DL"},
+    ]
+    assert logic.reidentify_platforms(candidates, ["CR", "ABEMA"]) == 2
+    assert candidates[0]["platform"] == "LINETV"
+    assert candidates[1]["platform"] == "ABEMA"
+    assert candidates[1]["platform_token"] == "ABEMA"
+    assert candidates[2]["platform_token"] == "CR"
+    # 已识别的候选再次刷新不会重复计数或改写
+    assert logic.reidentify_platforms(candidates, ["CR", "ABEMA"]) == 0
+
+
+def test_reidentify_platforms_keeps_unknown_when_no_match(logic):
+    candidates = [{"platform": "UNKNOWN", "platform_token": "",
+                   "title": "普通标题 S01E01 1080p"}]
+    assert logic.reidentify_platforms(candidates, ["CR"]) == 0
+    assert candidates[0]["platform"] == "UNKNOWN"

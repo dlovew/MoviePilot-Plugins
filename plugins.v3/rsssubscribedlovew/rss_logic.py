@@ -369,3 +369,28 @@ def candidate_platform_items(candidates: Any, limit: int = 8) -> List[Dict[str, 
 def candidate_platform_summary(candidates: Any, limit: int = 8) -> str:
     """把候选资源压成一行「平台-制作组」清单，保持数据页简洁。"""
     return '、'.join(item['label'] for item in candidate_platform_items(candidates, limit)) or '暂无候选'
+
+
+def reidentify_platforms(candidates: Any,
+                         tokens: Optional[List[str]] = None) -> int:
+    """只按当前词表重新识别「未识别平台」的候选，原地更新并返回刷新条数。
+
+    已识别出平台的候选一律不动；只有命中新词表才改写，避免把 UNKNOWN
+    换成更差的结果。用于用户补充自定义平台缩写后的手动刷新。
+    """
+    rules = tokens if tokens is not None else DEFAULT_PLATFORM_TOKENS
+    refreshed = 0
+    for candidate in candidates or []:
+        if not isinstance(candidate, dict):
+            continue
+        platform = str(candidate.get('platform') or '').upper()
+        if platform and platform != 'UNKNOWN' and candidate.get('platform_token'):
+            continue
+        hits = detect_platforms(candidate.get('title') or '', rules)
+        if not hits:
+            continue
+        candidate['platform'] = hits[0]['key']
+        candidate['platform_token'] = hits[0]['token']
+        candidate['platform_hits'] = [hit['token'] for hit in hits]
+        refreshed += 1
+    return refreshed
