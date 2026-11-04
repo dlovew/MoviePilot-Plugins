@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.6"
+    plugin_version = "3.1.7"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -521,11 +521,20 @@ class RssSubscribedlovew(_PluginBase):
                 'props': {'class': 'text-caption text-medium-emphasis mt-1'},
                 'content': [
                     {'component': 'div',
-                     'text': '未识别平台：复制下方标题里的缩写，填入设置页「自定义平台缩写」'},
-                    *[{'component': 'div',
-                       'props': {'style': ('user-select:all;word-break:break-all;'
-                                           'margin-top:0.25rem')},
-                       'text': title} for title in unknown_titles[:3]],
+                     'text': '未识别平台：在下方只读框中框选缩写并复制，填入设置页「自定义平台缩写」'},
+                    # 只读输入框允许拖选任意片段；user-select:all 会强制整行全选，
+                    # 反而无法只复制标题里的平台缩写。
+                    *[{'component': 'VTextField',
+                       'props': {
+                           'modelValue': title,
+                           'readonly': True,
+                           'variant': 'plain',
+                           'density': 'compact',
+                           'hideDetails': True,
+                           'class': 'text-caption',
+                           'style': 'font-size:0.75rem',
+                           'title': '可选中并复制标题中的平台缩写',
+                       }} for title in unknown_titles[:3]],
                 ],
             })
         return blocks
