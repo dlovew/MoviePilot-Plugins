@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.11"
+    plugin_version = "3.1.12"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -704,7 +704,14 @@ class RssSubscribedlovew(_PluginBase):
 
     def get_page(self) -> List[dict]:
         try:
-            return self._runtime_page()
+            blocks = self._runtime_page()
+            # 宽屏下限制阅读宽度并居中；窄屏时 max-width 不生效，自动铺满
+            return [{
+                'component': 'div',
+                'props': {'style': ('width:100%;max-width:960px;margin:0 auto;'
+                                    'box-sizing:border-box')},
+                'content': blocks,
+            }]
         except Exception as err:
             logger.error(f"拼装数据页面失败：{str(err)} - {traceback.format_exc()}")
             return [{'component': 'div', 'text': '数据页面加载失败，请查看插件日志'}]
