@@ -45,6 +45,7 @@ https://github.com/dlovew/MoviePilot-Plugins
 ## 仓库维护
 
 - 索引 `version`、插件类 `plugin_version`、`history` 首项必须三者一致，由 `.github/scripts/check_plugin_versions.py` 在 pre-push / PR / Release 三处校验。
+- **插件更新一定要变更版本号**：改动 `plugins.v3/` 下任何文件或插件元数据时，必须同步递增版本号，否则版本门禁会拦截。
 - 插件开发规范见 `docs/Plugin_Development.md`，仓库结构与发布规则见 `docs/Repository_Guide.md`，常见问题见 `docs/FAQ.md`。
 - 静态契约测试见 `tests/`，本地运行 `python tests/run.py`。
 

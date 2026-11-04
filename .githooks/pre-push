@@ -1,5 +1,6 @@
 #!/bin/sh
-# 在对象上传前复用 V3 版本校验，避免市场元数据与插件自报版本分离。
+# 在对象上传前复用 V3 版本校验，避免市场元数据与插件自报版本分离，
+# 并拦截「改了插件但没升版本号」的提交。
 # 启用方式：git config core.hooksPath .githooks
 set -eu
 
@@ -7,10 +8,18 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
 if command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
-  python .github/scripts/check_plugin_versions.py package.v3.json
+  PY=python
 elif command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
-  python3 .github/scripts/check_plugin_versions.py package.v3.json
+  PY=python3
 else
   echo "pre-push: 未找到可用的 Python 解释器，无法校验 package.v3.json" >&2
   exit 1
+fi
+
+"$PY" .github/scripts/check_plugin_versions.py package.v3.json
+
+# 有上游分支时，额外校验本批未推送提交中的插件更新是否已升版本号。
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+if [ -n "$upstream" ]; then
+  "$PY" .github/scripts/check_plugin_versions.py --check-bump "$upstream" package.v3.json
 fi

@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -155,12 +156,81 @@ def check_package(path: Path) -> list[str]:
     return errors
 
 
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    """执行只读 git 命令，显式按 UTF-8 解码以兼容 Windows 中文环境。"""
+    return subprocess.run(
+        ["git", *args], text=True, capture_output=True, check=False,
+        encoding="utf-8", errors="replace",
+    )
+
+
+def check_version_bump(base_ref: str, path: Path) -> list[str]:
+    """插件有任何更新时版本号必须严格递增。
+
+    PR 场景传 ``origin/main``，push 到 main 场景传 ``HEAD~1``。三点 diff 只统计
+    本次提交链引入的变更；除 ``plugins.v3/`` 目录外，索引元数据变化也算插件更新。
+    """
+    diff = _git("diff", "--name-only", f"{base_ref}...HEAD", "--", "plugins.v3")
+    if diff.returncode != 0:
+        return [f"无法比较 {base_ref}...HEAD：{(diff.stderr or '').strip()}"]
+    changed_dirs = set()
+    for line in (diff.stdout or "").splitlines():
+        parts = line.strip().split("/")
+        if len(parts) >= 2 and parts[0] == "plugins.v3":
+            changed_dirs.add(parts[1].lower())
+
+    shown = _git("show", f"{base_ref}:package.v3.json")
+    if shown.returncode != 0:
+        return [f"无法读取 {base_ref}:package.v3.json：{(shown.stderr or '').strip()}"]
+    raw = shown.stdout or ""
+    previous_index = json.loads(raw) if raw.strip() else {}
+    current_index = _load_package(path)
+    changed_ids = {
+        plugin_id.lower()
+        for plugin_id, meta in current_index.items()
+        if isinstance(previous_index.get(plugin_id), dict) and previous_index[plugin_id] != meta
+    }
+    targets = changed_dirs | changed_ids
+    if not targets:
+        return []
+
+    errors: list[str] = []
+    for plugin_id, meta in current_index.items():
+        if plugin_id.lower() not in targets:
+            continue
+        previous = previous_index.get(plugin_id)
+        if not isinstance(previous, dict):
+            continue  # 新增插件无需递增
+        previous_version = previous.get("version")
+        current_version = meta.get("version")
+        left = _semantic_version(previous_version)
+        right = _semantic_version(current_version)
+        if left is None or right is None or _compare_versions(right, left) <= 0:
+            errors.append(
+                f"{plugin_id} 插件有更新，但版本未递增"
+                f"（{previous_version} → {current_version}）；插件更新必须变更版本号"
+            )
+    return errors
+
+
 def main() -> int:
-    """命令入口：所有 package 均通过时返回 0，否则打印错误并返回 1。"""
-    package_files = [Path(arg) for arg in sys.argv[1:]] or [Path("package.v3.json")]
+    """命令入口：静态契约 + 可选的版本递增检查，全部通过返回 0。"""
+    args = sys.argv[1:]
+    bump_ref = None
+    if "--check-bump" in args:
+        position = args.index("--check-bump")
+        if position + 1 >= len(args):
+            print("插件版本门禁失败：\n- --check-bump 缺少 base ref 参数")
+            return 1
+        bump_ref = args[position + 1]
+        args = args[:position] + args[position + 2:]
+
+    package_files = [Path(arg) for arg in args] or [Path("package.v3.json")]
     errors: list[str] = []
     for package_file in package_files:
         errors.extend(check_package(package_file))
+    if bump_ref:
+        errors.extend(check_version_bump(bump_ref, package_files[0]))
     if errors:
         print("插件版本门禁失败：")
         for error in errors:

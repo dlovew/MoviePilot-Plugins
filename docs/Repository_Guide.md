@@ -60,9 +60,11 @@ MoviePilot-Plugins/
 
 ## 4. 版本规则
 
-- 本仓库只有一条 V3 版本线，版本号按 `3.x.y` 迭代；升级时同步修改 `package.v3.json` 的 `version` 与 `history`、插件类的 `plugin_version`，三者必须在同一次提交内。
+- **插件更新一定要变更版本号**：只要 `plugins.v3/<id小写>/` 下任何文件发生变化（Python 源码、配置页源码、`dist/` 构建产物、插件 README 等），或 `package.v3.json` 中该插件的元数据发生变化，都必须同步递增 `version`，不允许「改了代码但版本不变」。
+- 版本号按 V3 独立版本线迭代；升级时必须同步修改 `package.v3.json` 的 `version` 与 `history`、插件类的 `plugin_version`，三者必须在同一次提交内。
 - 每次升级都要在 `history` 顶部新增一条记录，说明本次变更；不要再往 V3 条目里追加 V2 版本记录。
 - `system_version` 只在插件确实依赖更高宿主能力时上调，不要为了「显得新」随意修改。
+- `check_plugin_versions.py --check-bump <base-ref> package.v3.json` 用 `git diff <base>...HEAD -- plugins.v3` 找出被更新的插件，并强制其版本号相对 base 严格递增；PR 用 `origin/main`，push 到 `main` 用 `HEAD~1`。
 
 ## 5. 开发一个 V3 插件
 
@@ -80,11 +82,11 @@ MoviePilot-Plugins/
 
 ## 6. 门禁与发布
 
-同一份版本校验脚本在三个入口复用：
+同一份版本校验脚本在三个入口复用，且都会执行「插件更新必须升版本」检查：
 
-- `.githooks/pre-push`（本地可选启用：`git config core.hooksPath .githooks`）
-- `.github/workflows/plugin-gate.yml`（所有指向 `main` 的 PR，不加 `paths` 过滤）
-- `.github/workflows/release.yml`（push 到 `main` 且 `package.v3.json` 变更，或手动触发）
+- `.githooks/pre-push`（本地可选启用：`git config core.hooksPath .githooks`，base 为当前分支上游）
+- `.github/workflows/plugin-gate.yml`（所有指向 `main` 的 PR 与 push 到 `main`，不加 `paths` 过滤；PR 的 base 为 `origin/main`，push 为 `HEAD~1`）
+- `.github/workflows/release.yml`（push 到 `main` 且 `package.v3.json` 变更，或手动触发；base 为 `HEAD~1`）
 
 Release 工作流只处理 `package.v3.json` 中 `release: true` 的条目，从 `plugins.v3/<id小写>/` 打包，Tag 为 `<插件ID>_v<版本>`，资产为 `<id小写>_v<版本>.zip`；目录自上一个同名 Tag 无变化则跳过。当前 5 个插件都走源码目录安装，未启用 `release`，如要启用需先确认 ZIP 中包含 `dist/assets/` 且排除前端源码与依赖目录。
 

@@ -165,3 +165,99 @@ def test_index_history_is_prefixed_and_ordered() -> None:
         assert keys[0] == f"v{meta['version']}", plugin_id
         assert all(numeric(key) >= numeric(next_key) for key, next_key in zip(keys, keys[1:])), plugin_id
         assert INDEX_FILE.is_file()
+
+
+def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """在临时仓库执行 git 命令，内联身份以免改动全局或仓库配置。"""
+    return subprocess.run(
+        [
+            "git", "-C", str(repo),
+            "-c", "user.name=contract-test",
+            "-c", "user.email=contract-test@example.com",
+            *args,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def _init_bump_repo(repo: Path, version: str = "3.0.0") -> None:
+    """构造一个合规的 V3 插件仓并提交基线。"""
+    _write_fixture(repo, package_version=version, source_version=version, history_key=f"v{version}")
+    scripts = repo / ".github/scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(CHECKER, scripts / CHECKER.name)
+    _run_git(repo, "init", "-q")
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", "baseline")
+
+
+def _commit(repo: Path, message: str) -> None:
+    _run_git(repo, "add", "-A")
+    _run_git(repo, "commit", "-q", "-m", message)
+
+
+def _bump_check(repo: Path, base: str = "HEAD~1") -> subprocess.CompletedProcess[str]:
+    """在临时仓库中运行真实版本门禁的版本递增检查。"""
+    return subprocess.run(
+        [
+            sys.executable,
+            str(repo / ".github/scripts/check_plugin_versions.py"),
+            "--check-bump", base, "package.v3.json",
+        ],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_version_bump_required_when_plugin_files_change(tmp_path: Path) -> None:
+    """改了插件代码但没升版本，门禁必须失败。"""
+    repo = tmp_path / "bump-required"
+    repo.mkdir()
+    _init_bump_repo(repo)
+    init_file = repo / "plugins.v3/example/__init__.py"
+    init_file.write_text(
+        init_file.read_text(encoding="utf-8") + "\n# 更新插件逻辑，但忘记升版本\n",
+        encoding="utf-8",
+    )
+    _commit(repo, "change plugin without version bump")
+    result = _bump_check(repo)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "插件更新必须变更版本号" in result.stdout
+
+
+def test_version_bump_passes_when_version_increases(tmp_path: Path) -> None:
+    """同步升版本后，门禁通过。"""
+    repo = tmp_path / "bump-ok"
+    repo.mkdir()
+    _init_bump_repo(repo)
+    init_file = repo / "plugins.v3/example/__init__.py"
+    init_file.write_text(
+        init_file.read_text(encoding="utf-8").replace('plugin_version = "3.0.0"', 'plugin_version = "3.0.1"')
+        + "\n# 更新插件逻辑\n",
+        encoding="utf-8",
+    )
+    meta = json.loads((repo / "package.v3.json").read_text(encoding="utf-8"))
+    meta["Example"]["version"] = "3.0.1"
+    meta["Example"]["history"] = {"v3.0.1": "更新插件逻辑", "v3.0.0": "初始版本"}
+    (repo / "package.v3.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    _commit(repo, "change plugin with version bump")
+    result = _bump_check(repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_no_bump_needed_for_non_plugin_changes(tmp_path: Path) -> None:
+    """只改文档等仓库级文件时不要求升版本。"""
+    repo = tmp_path / "docs-only"
+    repo.mkdir()
+    _init_bump_repo(repo)
+    (repo / "docs").mkdir()
+    (repo / "docs/guide.md").write_text("文档更新\n", encoding="utf-8")
+    _commit(repo, "docs only")
+    result = _bump_check(repo)
+    assert result.returncode == 0, result.stdout + result.stderr

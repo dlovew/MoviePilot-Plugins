@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -15,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -26,6 +31,15 @@ jobs:
 
       - name: Check plugin versions
         run: python .github/scripts/check_plugin_versions.py package.v3.json
+
+      - name: Check plugin version bumps
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/main"
+          else
+            BASE="HEAD~1"
+          fi
+          python .github/scripts/check_plugin_versions.py --check-bump "$BASE" package.v3.json
 
       - name: Run V3 contract tests
         run: python -m pytest tests -q
