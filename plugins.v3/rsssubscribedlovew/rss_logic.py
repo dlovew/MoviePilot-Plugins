@@ -2,6 +2,10 @@
 
 抽成独立模块是为了能在仓库内直接做单元测试：宿主侧只负责拉取 RSS、
 识别媒体、调用订阅链，所有「谁入池 / 何时结算 / 选哪个平台」的判断都在这里。
+
+平台词条的 key 一律使用资源标题里的实际缩写（如 ``CR`` / ``MyVideo`` /
+``Baha``），识别与生成订阅 include 共用同一份词表，避免归一化后写进 include
+导致订阅搜不到资源。
 """
 from __future__ import annotations
 
@@ -10,25 +14,15 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-# 分层规则：按顺序命中，命中即停止。最后一个 "*" 兜底任何已识别平台。
-DEFAULT_TIER_RULES: List[Dict[str, Any]] = [
-    {"tier": 1, "platforms": ["IQ", "LINETV", "MYVIDEO", "VIU"], "pick": "smallest_normalized_size"},
-    {"tier": 2, "platforms": ["CR"], "pick": "unconditional"},
-    {"tier": 3, "platforms": ["BAHA", "NF", "AMZN"], "pick": "smallest_normalized_size"},
-    {"tier": 4, "platforms": ["*"], "pick": "smallest_normalized_size"},
+# 平台词表：既是识别关键字，也是设置页下拉选项
+DEFAULT_PLATFORM_TOKENS: List[str] = [
+    "IQ", "LINETV", "MyVideo", "Viu", "CR", "Baha", "NF", "AMZN",
 ]
 
-# 平台识别正则，设置页可用 JSON 覆盖
-DEFAULT_PLATFORM_PATTERNS: Dict[str, str] = {
-    "IQ": r"\bIQ\b|IQIYI|爱奇艺",
-    "LINETV": r"LINETV|LINE[\s._-]?TV",
-    "MYVIDEO": r"MY[\s._-]?VIDEO",
-    "VIU": r"\bVIU\b",
-    "CR": r"\bCR\b|CRUNCHYROLL",
-    "BAHA": r"BAHA|BAHAMUT|巴哈",
-    "NF": r"\bNF\b|NETFLIX",
-    "AMZN": r"\bAMZN\b|AMAZON|\bAMZ\b",
-}
+# 三个多选框的默认值
+DEFAULT_TIER1_PLATFORMS: List[str] = ["IQ", "LINETV", "MyVideo", "Viu"]
+DEFAULT_TIER2_PLATFORMS: List[str] = ["CR"]
+DEFAULT_TIER3_PLATFORMS: List[str] = ["Baha", "NF", "AMZN"]
 
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -84,22 +78,68 @@ def pool_key(media_source: Any, media_id: Any, season: Any,
     return key
 
 
-def detect_platforms(title: str, patterns: Optional[Dict[str, str]] = None) -> List[str]:
-    """按配置顺序返回标题命中的平台名；未命中返回空列表。"""
-    rules = patterns or DEFAULT_PLATFORM_PATTERNS
-    text = str(title or "").upper()
-    hits: List[str] = []
-    for platform, expression in rules.items():
-        try:
-            if re.search(expression, text, re.IGNORECASE):
-                hits.append(str(platform).upper())
-        except re.error:
+def platform_pattern(token: Any) -> str:
+    """生成平台词条的正则片段。
+
+    短缩写（如 ``CR`` / ``NF``）加前后「非字母数字」边界，避免命中 ``CRC``
+    之类的无关片段；长词条直接按原文匹配，保留标题里的大小写与空格写法。
+    """
+    text = str(token or '').strip()
+    if not text:
+        return ''
+    escaped = re.escape(text)
+    if len(text) <= 3:
+        return rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])"
+    return escaped
+
+
+def detect_platforms(title: str, tokens: Optional[List[str]] = None) -> List[Dict[str, str]]:
+    """按词表顺序返回命中的平台。
+
+    每项包含 ``key``（归一化大写，仅供分层匹配）与 ``token``（标题里
+    实际抠出来的原文片段，用于生成订阅 include）。
+    """
+    rules = tokens if tokens is not None else DEFAULT_PLATFORM_TOKENS
+    hits: List[Dict[str, str]] = []
+    for token in rules:
+        expression = platform_pattern(token)
+        if not expression:
             continue
+        match = re.search(expression, str(title or ''), re.IGNORECASE)
+        if match:
+            hits.append({'key': str(token).upper(), 'token': match.group(0)})
     return hits
 
 
+def build_include(platform_token: Any, team: Any = None) -> str:
+    """用标题原文平台片段构造订阅 include 正则；未识别平台时不加平台条件。"""
+    parts = []
+    token = str(platform_token or '').strip()
+    if token and token.upper() != 'UNKNOWN':
+        parts.append(f"(?=.*{platform_pattern(token)})")
+    if team:
+        parts.append(f"(?=.*{re.escape(str(team))})")
+    return "".join(parts)
+
+
+def build_tier_rules(tier1: Optional[List[str]], tier2: Optional[List[str]],
+                     tier3: Optional[List[str]],
+                     tier2_unconditional: bool = True) -> List[Dict[str, Any]]:
+    """把设置页的三个多选框转换为分层选优规则；末层兜底任何已识别平台。"""
+    return [
+        {"tier": 1, "platforms": list(tier1 or []), "pick": "smallest_normalized_size"},
+        {
+            "tier": 2,
+            "platforms": list(tier2 or []),
+            "pick": "unconditional" if tier2_unconditional else "smallest_normalized_size",
+        },
+        {"tier": 3, "platforms": list(tier3 or []), "pick": "smallest_normalized_size"},
+        {"tier": 4, "platforms": ["*"], "pick": "smallest_normalized_size"},
+    ]
+
+
 def parse_json_config(text: Any, fallback: Any) -> Any:
-    """解析设置页里的 JSON 文本框，填错时静默回退到默认值。"""
+    """解析可选的 JSON 文本框，填错时静默回退到默认值。"""
     if not text or not str(text).strip():
         return fallback
     try:
@@ -135,11 +175,14 @@ def choose_best(candidates: Sequence[Dict[str, Any]],
 
     - Tier 内的 ``unconditional`` 表示相对其他档无条件优先，组内仍按体积排。
     - 单平台兜底由最后一个 ``"*"`` 规则承担。
+    - 分层匹配用归一化 ``key``，展示与订阅用标题原文 ``token``。
     """
     items = list(candidates or [])
     if not items:
         return None, "候选池为空"
-    rules = tier_rules or DEFAULT_TIER_RULES
+    rules = tier_rules or build_tier_rules(
+        DEFAULT_TIER1_PLATFORMS, DEFAULT_TIER2_PLATFORMS, DEFAULT_TIER3_PLATFORMS
+    )
     for rule in rules:
         platforms = [str(p).upper() for p in (rule.get("platforms") or [])]
         if not platforms:
@@ -154,11 +197,12 @@ def choose_best(candidates: Sequence[Dict[str, Any]],
             continue
         tier = rule.get("tier", "?")
         winner = rank_by_size(picked)[0]
+        label = winner.get('platform_token') or winner.get('platform')
         size = winner.get("normalized_size")
         size_text = f"{size / 1024 ** 3:.2f} GiB/集" if isinstance(size, (int, float)) else "体积未知"
         if rule.get("pick") == "unconditional":
-            return winner, f"Tier{tier} 无条件优先 {winner.get('platform')}（{size_text}）"
-        return winner, f"Tier{tier} 等效单集体积最小：{winner.get('platform')}（{size_text}）"
+            return winner, f"Tier{tier} 无条件优先 {label}（{size_text}）"
+        return winner, f"Tier{tier} 等效单集体积最小：{label}（{size_text}）"
     return None, "无平台命中任何分层规则"
 
 

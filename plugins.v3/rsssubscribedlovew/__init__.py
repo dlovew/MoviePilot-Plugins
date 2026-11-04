@@ -23,28 +23,34 @@ from urllib.parse import urlparse
 
 try:
     from .rss_logic import (
-        DEFAULT_PLATFORM_PATTERNS,
-        DEFAULT_TIER_RULES,
+        DEFAULT_PLATFORM_TOKENS,
+        DEFAULT_TIER1_PLATFORMS,
+        DEFAULT_TIER2_PLATFORMS,
+        DEFAULT_TIER3_PLATFORMS,
+        build_include,
+        build_tier_rules,
         choose_best,
         detect_platforms,
         is_due,
         normalized_size,
         now_text,
-        parse_json_config,
         pool_key,
         season_matches,
         trim_records,
     )
 except ImportError:  # 兼容按顶层模块加载的宿主
     from rss_logic import (  # type: ignore
-        DEFAULT_PLATFORM_PATTERNS,
-        DEFAULT_TIER_RULES,
+        DEFAULT_PLATFORM_TOKENS,
+        DEFAULT_TIER1_PLATFORMS,
+        DEFAULT_TIER2_PLATFORMS,
+        DEFAULT_TIER3_PLATFORMS,
+        build_include,
+        build_tier_rules,
         choose_best,
         detect_platforms,
         is_due,
         normalized_size,
         now_text,
-        parse_json_config,
         pool_key,
         season_matches,
         trim_records,
@@ -61,7 +67,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.0"
+    plugin_version = "3.1.1"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -88,8 +94,11 @@ class RssSubscribedlovew(_PluginBase):
 
     # 候选池与决策配置
     _collect_window_hours: int = 24
-    _platform_patterns: str = ""
-    _tier_rules: str = ""
+    _tier1_platforms: List[str] = DEFAULT_TIER1_PLATFORMS
+    _tier2_platforms: List[str] = DEFAULT_TIER2_PLATFORMS
+    _tier3_platforms: List[str] = DEFAULT_TIER3_PLATFORMS
+    _tier2_unconditional: bool = True
+    _custom_platforms: str = ""
     _auto_detect_episode_group: bool = True
     _auto_select_single_group: bool = False
     _episode_group_overrides: str = ""
@@ -115,8 +124,11 @@ class RssSubscribedlovew(_PluginBase):
             self._save_path = config.get("save_path", "")
             self._size_range = config.get("size_range", "")
             self._collect_window_hours = self.__to_int(config.get("collect_window_hours"), 24)
-            self._platform_patterns = config.get("platform_patterns", "") or ""
-            self._tier_rules = config.get("tier_rules", "") or ""
+            self._tier1_platforms = self.__as_list(config.get("tier1_platforms"), DEFAULT_TIER1_PLATFORMS)
+            self._tier2_platforms = self.__as_list(config.get("tier2_platforms"), DEFAULT_TIER2_PLATFORMS)
+            self._tier3_platforms = self.__as_list(config.get("tier3_platforms"), DEFAULT_TIER3_PLATFORMS)
+            self._tier2_unconditional = bool(config.get("tier2_unconditional", True))
+            self._custom_platforms = config.get("custom_platforms", "") or ""
             self._auto_detect_episode_group = config.get("auto_detect_episode_group", True)
             self._auto_select_single_group = config.get("auto_select_single_group", False)
             self._episode_group_overrides = config.get("episode_group_overrides", "") or ""
@@ -215,6 +227,15 @@ class RssSubscribedlovew(_PluginBase):
             return default
 
     @staticmethod
+    def __as_list(value: Any, default: List[str]) -> List[str]:
+        """兼容 VSelect multiple 的数组与配置迁移时的逗号分隔字符串。"""
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str) and value.strip():
+            return [part.strip() for part in value.split(',') if part.strip()]
+        return list(default)
+
+    @staticmethod
     def _field(component: str, model: str, label: str, md: int = 4, **props) -> dict:
         """生成设置页中一个 VCol 包裹的表单控件。"""
         return {
@@ -287,13 +308,31 @@ class RssSubscribedlovew(_PluginBase):
                                  '到期按分层规则比较等效单集体积，只创建一次整季订阅。')
                     },
                     {'component': 'VRow', 'content': [
-                        self._field('VTextarea', 'platform_patterns',
-                                    '平台识别正则（JSON，留空用默认）', md=6, rows=4,
-                                    placeholder='{"VIU": "\\\\bVIU\\\\b"}'),
-                        self._field('VTextarea', 'tier_rules',
-                                    '分层选优规则（JSON，留空用默认）', md=6, rows=4,
-                                    placeholder='[{"tier":1,"platforms":["IQ"],"pick":"smallest_normalized_size"}]'),
+                        self._field('VSelect', 'tier1_platforms',
+                                    'Tier1 首选平台（按等效单集体积选最小）', md=4,
+                                    multiple=True, chips=True, clearable=True,
+                                    items=self.__platform_items()),
+                        self._field('VSelect', 'tier2_platforms', 'Tier2 兜底平台', md=4,
+                                    multiple=True, chips=True, clearable=True,
+                                    items=self.__platform_items()),
+                        self._field('VSelect', 'tier3_platforms', 'Tier3 其余兜底平台', md=4,
+                                    multiple=True, chips=True, clearable=True,
+                                    items=self.__platform_items()),
                     ]},
+                    {'component': 'VRow', 'content': [
+                        self._field('VSwitch', 'tier2_unconditional',
+                                    'Tier2 无条件优先（不与 Tier3 比体积）', md=6),
+                        self._field('VTextarea', 'custom_platforms',
+                                    '自定义平台缩写（每行一个，按资源标题里的写法）', md=6,
+                                    rows=2, placeholder='ABEMA'),
+                    ]},
+                    {
+                        'component': 'VAlert',
+                        'props': {'type': 'info', 'variant': 'tonal', 'class': 'mb-3'},
+                        'text': ('平台缩写直接取自资源标题原文，订阅 include 使用同一片段，'
+                                 '例如标题写 CR 就不会写成 Crunchyroll、写 MyVideo 不会写成 MYVIDEO。'
+                                 '新增平台先在自定义框填缩写并保存，即可在上方下拉中勾选。')
+                    },
                 ]
             }
         ]
@@ -318,8 +357,11 @@ class RssSubscribedlovew(_PluginBase):
             "retry_unrecognized": True,
             "notify_unrecognized": True,
             "dry_run": False,
-            "platform_patterns": "",
-            "tier_rules": "",
+            "tier1_platforms": list(DEFAULT_TIER1_PLATFORMS),
+            "tier2_platforms": list(DEFAULT_TIER2_PLATFORMS),
+            "tier3_platforms": list(DEFAULT_TIER3_PLATFORMS),
+            "tier2_unconditional": True,
+            "custom_platforms": "",
         }
         return page, model
 
@@ -419,7 +461,12 @@ class RssSubscribedlovew(_PluginBase):
             for candidate in candidates:
                 size = candidate.get('normalized_size')
                 size_text = f"{size / 1024 ** 3:.2f} GiB/集" if isinstance(size, (int, float)) else '体积未知'
-                lines.append(f"{candidate.get('platform') or '未知平台'} · {size_text} · {candidate.get('title') or ''}")
+                platform_label = (candidate.get('platform_token')
+                                  or candidate.get('platform') or '未知平台')
+                extra_hits = [hit for hit in (candidate.get('platform_hits') or [])
+                              if hit != platform_label]
+                hits_text = f"（另命中 {'/'.join(extra_hits)}）" if extra_hits else ''
+                lines.append(f"{platform_label} · {size_text}{hits_text} · {candidate.get('title') or ''}")
             waiting.append({
                 'component': 'VCard',
                 'props': {'class': 'ma-1'},
@@ -610,11 +657,29 @@ class RssSubscribedlovew(_PluginBase):
     # ------------------------------------------------------------------
     # 入池
     # ------------------------------------------------------------------
-    def __platform_patterns(self) -> Dict[str, str]:
-        return parse_json_config(self._platform_patterns, DEFAULT_PLATFORM_PATTERNS)
+    def __platform_tokens(self) -> List[str]:
+        """默认词表 + 自定义缩写 + 已勾选值，识别与下拉选项共用。"""
+        tokens = list(DEFAULT_PLATFORM_TOKENS)
+        for line in str(self._custom_platforms or '').splitlines():
+            token = line.strip()
+            if token and not token.startswith('#') and token not in tokens:
+                tokens.append(token)
+        for selected in (self._tier1_platforms, self._tier2_platforms, self._tier3_platforms):
+            for token in selected or []:
+                if token and token not in tokens:
+                    tokens.append(token)
+        return tokens
+
+    def __platform_items(self) -> List[dict]:
+        return [{'title': token, 'value': token} for token in self.__platform_tokens()]
 
     def __tier_rules(self) -> List[Dict[str, Any]]:
-        return parse_json_config(self._tier_rules, DEFAULT_TIER_RULES)
+        return build_tier_rules(
+            self._tier1_platforms,
+            self._tier2_platforms,
+            self._tier3_platforms,
+            self._tier2_unconditional,
+        )
 
     def __group_overrides(self) -> Dict[str, str]:
         """解析设置页「剧集组覆盖」，键可以是媒体 ID、TMDB ID 或媒体名。"""
@@ -750,8 +815,9 @@ class RssSubscribedlovew(_PluginBase):
         if key in state['handled']:
             return
 
-        platforms = detect_platforms(title, self.__platform_patterns())
-        platform = platforms[0] if platforms else 'UNKNOWN'
+        platform_hits = detect_platforms(title, self.__platform_tokens())
+        platform = platform_hits[0]['key'] if platform_hits else 'UNKNOWN'
+        platform_token = platform_hits[0]['token'] if platform_hits else ''
         status = season_matches(getattr(mediainfo, 'seasons', None), season, episodes)
         if status == 'unknown' and not allow_unknown:
             self.__record_retry(state, result, rss_url, 'TMDB 季集信息暂缺')
@@ -797,6 +863,8 @@ class RssSubscribedlovew(_PluginBase):
         item['candidates'].append({
             'title': title,
             'platform': platform,
+            'platform_token': platform_token,
+            'platform_hits': [hit['token'] for hit in platform_hits],
             'team': getattr(meta, 'resource_team', None),
             'resolution': getattr(meta, 'resource_pix', None),
             'quality': getattr(meta, 'resource_type', None),
@@ -845,17 +913,17 @@ class RssSubscribedlovew(_PluginBase):
             if not item.get('dry_run_done'):
                 item['dry_run_done'] = True
                 self.__record(state, item, 'dry_run', reason=f"试运行：{reason}",
-                              platform=winner.get('platform'))
+                              platform=winner.get('platform_token') or winner.get('platform'))
             return
 
         subscribe_id, error, detail = self.__create_subscription(item, winner)
         if error:
             self.__finalize(state, key, item, 'failed', reason=detail or error,
-                            platform=winner.get('platform'))
+                            platform=winner.get('platform_token') or winner.get('platform'))
             self.__notify('自定义订阅 · 订阅失败', f"{item.get('title')}：{detail or error}")
             return
         self.__finalize(state, key, item, 'subscribed', reason=reason,
-                        platform=winner.get('platform'), subscribe_id=subscribe_id)
+                        platform=winner.get('platform_token') or winner.get('platform'), subscribe_id=subscribe_id)
         state['last_run']['settled'] = int(state['last_run'].get('settled') or 0) + 1
 
     def __record(self, state: Dict[str, Any], item: dict, action: str, reason: str = '',
@@ -889,7 +957,7 @@ class RssSubscribedlovew(_PluginBase):
             except (TypeError, ValueError):
                 source = MediaSource.TMDB
             kwargs = {
-                'include': self.__build_include(winner.get('platform'), winner.get('team')),
+                'include': build_include(winner.get('platform_token'), winner.get('team')),
                 'sites': self.__get_site_ids(winner.get('rss_url') or '') or None,
                 'username': 'RSS订阅',
                 'exist_ok': True,
@@ -916,8 +984,8 @@ class RssSubscribedlovew(_PluginBase):
             if error or not subscribe_id:
                 return None, 'subscribe_failed', str(error or '宿主未返回订阅 ID')
             logger.info(f"添加订阅成功：{item.get('title')} S{item.get('season')} "
-                        f"平台={winner.get('platform')} include={kwargs['include']} "
-                        f"剧集组={item.get('episode_group') or '无'}")
+                        f"平台={winner.get('platform_token') or winner.get('platform')} "
+                        f"include={kwargs['include']} 剧集组={item.get('episode_group') or '无'}")
             return subscribe_id, '', ''
         except Exception as err:
             logger.error(f"添加订阅异常：{str(err)} - {traceback.format_exc()}")
@@ -1042,8 +1110,11 @@ class RssSubscribedlovew(_PluginBase):
             "save_path": self._save_path,
             "size_range": self._size_range,
             "collect_window_hours": self._collect_window_hours,
-            "platform_patterns": self._platform_patterns,
-            "tier_rules": self._tier_rules,
+            "tier1_platforms": self._tier1_platforms,
+            "tier2_platforms": self._tier2_platforms,
+            "tier3_platforms": self._tier3_platforms,
+            "tier2_unconditional": self._tier2_unconditional,
+            "custom_platforms": self._custom_platforms,
             "auto_detect_episode_group": self._auto_detect_episode_group,
             "auto_select_single_group": self._auto_select_single_group,
             "episode_group_overrides": self._episode_group_overrides,
@@ -1056,16 +1127,6 @@ class RssSubscribedlovew(_PluginBase):
     # ------------------------------------------------------------------
     # 工具方法
     # ------------------------------------------------------------------
-    @staticmethod
-    def __build_include(platform: str, team: str = None) -> str:
-        """平台未识别时不加平台条件，避免生成永远搜不到的 include 正则。"""
-        parts = []
-        if platform and platform != 'UNKNOWN':
-            parts.append(f"(?=.*{platform})")
-        if team:
-            parts.append(f"(?=.*{team})")
-        return "".join(parts)
-
     @staticmethod
     def __safe_poster(mediainfo) -> str:
         try:

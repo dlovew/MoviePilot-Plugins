@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -27,7 +28,8 @@ def logic():
 
 def _candidate(platform: str, size_per_episode: float, title: str = "") -> dict:
     return {
-        "platform": platform,
+        "platform": platform.upper(),
+        "platform_token": platform,
         "normalized_size": size_per_episode,
         "title": title or platform,
     }
@@ -55,56 +57,104 @@ def test_pool_key_is_stable_and_group_aware(logic):
     assert logic.pool_key("tmdb", "12345", None) == "tmdb:12345:S00"
 
 
-def test_detect_platforms(logic):
-    assert logic.detect_platforms("[IQ] 某番 S01E01 1080p") == ["IQ"]
-    assert logic.detect_platforms("MyVideo WEB-DL 某番") == ["MYVIDEO"]
-    assert logic.detect_platforms("Crunchyroll 某番") == ["CR"]
+def test_detect_platforms_keeps_title_spelling(logic):
+    """识别结果必须带标题原文片段，供订阅 include 使用。"""
+    hits = logic.detect_platforms(
+        "Chitose-kun wa Ramune Bin no Naka 2025 S01E01 1080p MyVideo WEB-DL H264 AAC-UBWEB"
+    )
+    assert hits == [{"key": "MYVIDEO", "token": "MyVideo"}]
+
+    hits = logic.detect_platforms(
+        "Dark Machine the Animation 2026 S01E01 1080p CR WEB-DL H264 AAC-UBWEB"
+    )
+    assert hits == [{"key": "CR", "token": "CR"}]
     assert logic.detect_platforms("普通标题 某番 E01") == []
+
+
+def test_short_platform_token_does_not_match_longer_words(logic):
+    pattern = logic.platform_pattern("CR")
+    assert re.search(pattern, "1080p CR WEB-DL", re.IGNORECASE)
+    assert not re.search(pattern, "CRC WS", re.IGNORECASE)
+    assert "MyVideo" in logic.platform_pattern("MyVideo")
+    assert "\\" not in logic.platform_pattern("Baha")
+
+
+def test_build_include_uses_title_token(logic):
+    """include 必须按标题缩写生成，不能写成全称或归一化大写。"""
+    include = logic.build_include("CR")
+    assert "CR" in include
+    assert "Crunchyroll" not in include
+    assert "MYVIDEO" not in include
+
+    assert "MyVideo" in logic.build_include("MyVideo")
+    assert "MYVIDEO" not in logic.build_include("MyVideo")
+    assert "Baha" in logic.build_include("Baha")
+    assert "BAHA" not in logic.build_include("Baha")
+    assert "TEAM" in logic.build_include("CR", "TEAM")
+
+    assert logic.build_include("") == ""
+    assert logic.build_include("UNKNOWN") == ""
+
+
+def test_build_tier_rules_from_multiselects(logic):
+    rules = logic.build_tier_rules(["IQ", "MyVideo"], ["CR"], ["Baha"], True)
+    assert [rule["tier"] for rule in rules] == [1, 2, 3, 4]
+    assert rules[1]["platforms"] == ["CR"]
+    assert rules[1]["pick"] == "unconditional"
+    assert rules[3]["platforms"] == ["*"]
+
+    rules = logic.build_tier_rules([], [], [], False)
+    assert rules[1]["pick"] == "smallest_normalized_size"
 
 
 def test_choose_best_prefers_smallest_in_tier_one(logic):
     candidates = [
-        _candidate("VIU", 3.0),
+        _candidate("Viu", 3.0),
         _candidate("IQ", 1.2),
         _candidate("LINETV", 2.0),
         _candidate("CR", 0.1),
     ]
     winner, reason = logic.choose_best(candidates)
-    assert winner["platform"] == "IQ"
+    assert winner["platform_token"] == "IQ"
     assert "等效单集体积最小" in reason
 
 
 def test_choose_best_cr_is_unconditional_when_tier_one_missing(logic):
-    candidates = [_candidate("CR", 9.0), _candidate("BAHA", 0.2), _candidate("NF", 0.3)]
+    candidates = [_candidate("CR", 9.0), _candidate("Baha", 0.2), _candidate("NF", 0.3)]
     winner, reason = logic.choose_best(candidates)
-    assert winner["platform"] == "CR"
+    assert winner["platform_token"] == "CR"
     assert "无条件优先" in reason
 
 
 def test_choose_best_falls_back_to_tier_three_and_unknown_platform(logic):
-    candidates = [_candidate("BAHA", 3.0), _candidate("AMZN", 1.0)]
+    candidates = [_candidate("Baha", 3.0), _candidate("AMZN", 1.0)]
     winner, _ = logic.choose_best(candidates)
-    assert winner["platform"] == "AMZN"
+    assert winner["platform_token"] == "AMZN"
 
     single = [_candidate("SOMEPLATFORM", 1.5)]
     winner, _ = logic.choose_best(single)
-    assert winner["platform"] == "SOMEPLATFORM"
+    assert winner["platform_token"] == "SOMEPLATFORM"
 
 
 def test_choose_best_handles_missing_size_and_empty_pool(logic):
     candidates = [
-        {"platform": "IQ", "normalized_size": None, "title": "unknown-size"},
-        _candidate("VIU", 2.0),
+        {"platform": "IQ", "platform_token": "IQ", "normalized_size": None, "title": "unknown-size"},
+        _candidate("Viu", 2.0),
     ]
     winner, _ = logic.choose_best(candidates)
-    assert winner["platform"] == "VIU"
+    assert winner["platform_token"] == "Viu"
     assert logic.choose_best([])[0] is None
 
 
-def test_custom_tier_rules_are_honored(logic):
-    rules = [{"tier": 1, "platforms": ["VIU"], "pick": "smallest_normalized_size"}]
-    winner, _ = logic.choose_best([_candidate("IQ", 0.1), _candidate("VIU", 5.0)], rules)
-    assert winner["platform"] == "VIU"
+def test_choose_best_respects_custom_multiselect_tiers(logic):
+    candidates = [
+        _candidate("Baha", 0.1),
+        _candidate("MyVideo", 9.0),
+    ]
+    rules = logic.build_tier_rules(["MyVideo"], [], [], True)
+    winner, reason = logic.choose_best(candidates, rules)
+    assert winner["platform_token"] == "MyVideo"
+    assert "MyVideo" in reason
 
 
 def test_season_matches(logic):
