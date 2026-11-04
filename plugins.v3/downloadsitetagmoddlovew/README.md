@@ -8,19 +8,23 @@
 downloadsitetagmoddlovew/
 ├── __init__.py                     # 插件主类，get_render_mode() 返回 ("vue", "dist/assets")
 ├── src/components/Config.vue       # 配置页源码（联邦暴露 ./Config）
+├── src/main.js                     # 本地预览入口，仅 npm run preview 使用
 ├── vite.config.js / package.json   # 联邦构建工程
 ├── dist/assets/                    # 构建产物，必须包含 remoteEntry.js
-├── index.html                      # 本地预览入口
+├── dist/index.html                 # 本地预览产物，宿主不加载
+├── index.html                      # Vite 构建入口
 └── README.md
 ```
 
 ## 开发
 
 ```bash
-yarn install
-yarn dev      # vite build --watch，配合 PLUGIN_LOCAL_REPO_PATHS 联调
-yarn build    # 生成 dist/assets，提交产物
+yarn install                        # 或 npm install --no-package-lock
+yarn dev                            # vite build --watch，配合 PLUGIN_LOCAL_REPO_PATHS 联调
+yarn build                          # 重新生成 dist/，提交产物
 ```
+
+构建产物只包含 ESM 远程模块，不含 Vuetify 全局样式；`dist/index.html` 与入口 JS 仅供本地预览，宿主只加载 `dist/assets/remoteEntry.js`。
 
 构建要求（见 `MoviePilot-Frontend/docs/module-federation-guide.md`）：
 

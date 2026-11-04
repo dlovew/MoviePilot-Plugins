@@ -1,113 +1,103 @@
 import { importShared } from './__federation_fn_import-JrT3xvdd.js';
 
-const {toDisplayString:_toDisplayString,createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,createVNode:_createVNode,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementVNode:_createElementVNode,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,withModifiers:_withModifiers} = await importShared('vue');
+const {createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withCtx:_withCtx,createVNode:_createVNode,toDisplayString:_toDisplayString,openBlock:_openBlock,createBlock:_createBlock,createCommentVNode:_createCommentVNode,createElementVNode:_createElementVNode,renderList:_renderList,Fragment:_Fragment,createElementBlock:_createElementBlock,withModifiers:_withModifiers} = await importShared('vue');
 
 
 const _hoisted_1 = { class: "plugin-config" };
 
-const {ref,reactive,onMounted} = await importShared('vue');
+const {computed,reactive,ref} = await importShared('vue');
 
 
-// 接收初始配置
 
 const _sfc_main = {
   __name: 'Config',
   props: {
-  api: { 
-    type: [Object, Function],
-    required: true,
-  },
-  initialConfig: {
-    type: Object,
-    default: () => ({}),
-  },
-  pluginId: {
-    type: String,
-    default: '',
-  },
-  sourcePluginId: {
-    type: String,
-    default: '',
-  }
+  api: { type: [Object, Function], required: true },
+  initialConfig: { type: Object, default: () => ({}) },
+  pluginId: { type: String, default: '' },
+  sourcePluginId: { type: String, default: '' },
 },
-  emits: ['save', 'close', 'switch'],
+  emits: ['save', 'close', 'switch', 'layout'],
   setup(__props, { emit: __emit }) {
 
+/**
+ * 下载任务分类与标签插件的 V3 联邦配置组件。
+ *
+ * 配置读取只依赖宿主注入的 initialConfig，保存统一通过 emit('save') 交给宿主；
+ * 调用插件自定义 API 时使用实例作用域的 pluginId，不硬编码类名，以支持插件分身。
+ */
 const props = __props;
 
-// 表单状态
+const emit = __emit;
+
+const scheduleTypes = ['禁用', '计划任务', '固定间隔'];
+const intervalUnits = ['分钟', '小时'];
+
+const defaultConfig = {
+  name: '',
+  enable: false,
+  interval: '禁用',
+  interval_cron: '5 4 * * *',
+  interval_time: 6,
+  interval_unit: '小时',
+  enable_media_tag: false,
+  enable_tag: false,
+  enable_category: false,
+  enable_del_tags: false,
+  downloaders: [],
+  all_downloaders: [],
+  all_cat: [],
+  all_cat_rename: [],
+  onlyonce: false,
+  rename_type: false,
+  path_rename: '',
+  catprefix: '',
+  siteprefix: '',
+  tracker_mappings_str: '',
+};
+
+const config = reactive({ ...defaultConfig, ...(props.initialConfig || {}) });
 const form = ref(null);
 const isFormValid = ref(true);
 const error = ref(null);
 const saving = ref(false);
-ref(false);
+const pluginId = computed(() => props.pluginId || props.sourcePluginId || config.id || '');
 
-const scheduleTypes = ['禁用','计划任务','固定间隔'];
-const intervalUnits = ['分钟','小时'];
+function notifyClose() {
+  emit('close');
+}
 
-// 配置数据，使用默认值和初始配置合并
-// 插件 ID 由宿主注入的 pluginId 提供，不再硬编码类名（支持插件分身）
-const defaultConfig = {
-  name: '下载任务分类与标签魔改VUE版 -dlovew',
-};
-
-// 合并默认配置和初始配置
-const config = reactive({ ...defaultConfig, ...props.initialConfig});
-
-
-// 初始化配置（V3 配置已通过 props.initialConfig 注入，无需额外请求）
-// 注：原 onMounted 中请求 plugin/${config.id}/config 的端点在 V3 后端不存在，已移除
-
-// 自定义事件，用于保存配置
-const emit = __emit;
-
-// 保存配置
 async function saveConfig() {
   if (!isFormValid.value) {
     error.value = '请修正表单错误';
     return
   }
-
   saving.value = true;
   error.value = null;
-
   try {
-    // 模拟API调用等待
-    // await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // 发送保存事件
+    // V3 宿主统一 PUT plugin/{id} 保存配置，组件不自行调用配置端点
     emit('save', { ...config });
   } catch (err) {
-    console.error('保存配置失败:', err);
-    error.value = err.message || '保存配置失败';
+    error.value = err?.message || '保存配置失败';
   } finally {
     saving.value = false;
   }
 }
 
-// 重置表单
 function resetForm() {
-
-  Object.keys(props.initialConfig).forEach(key => {
-    console.log(key);
+  Object.keys(props.initialConfig || {}).forEach(key => {
     config[key] = props.initialConfig[key];
   });
-
-
-  if (form.value) {
-    form.value.resetValidation();
-  }
+  form.value?.resetValidation?.();
 }
 
-// 重置二级分类
 async function resetCategories() {
+  if (!pluginId.value) {
+    error.value = '未获取到插件实例 ID，无法重置二级分类';
+    return
+  }
   try {
-    const pluginId = props.pluginId || props.sourcePluginId || config.id || '';
-    if (!pluginId) {
-      error.value = '未获取到插件实例 ID，无法重置二级分类';
-      return
-    }
-    const response = await props.api.post(`plugin/${pluginId}/reset_categories`);
+    const response = await props.api.post(`plugin/${pluginId.value}/reset_categories`);
     if (response?.all_cat_rename) {
       config.all_cat_rename = [...response.all_cat_rename];
     }
@@ -116,20 +106,14 @@ async function resetCategories() {
     }
     error.value = response?.message || '二级分类已重置';
   } catch (err) {
-    console.error('重置二级分类失败:', err);
-    error.value = err.message || '重置二级分类失败';
+    error.value = err?.message || '重置二级分类失败';
   }
 }
 
-// 通知主应用关闭组件
-function notifyClose() {
-  emit('close');
-}
-
 return (_ctx, _cache) => {
-  const _component_v_card_title = _resolveComponent("v-card-title");
   const _component_v_icon = _resolveComponent("v-icon");
   const _component_v_btn = _resolveComponent("v-btn");
+  const _component_v_card_title = _resolveComponent("v-card-title");
   const _component_v_card_item = _resolveComponent("v-card-item");
   const _component_v_alert = _resolveComponent("v-alert");
   const _component_v_switch = _resolveComponent("v-switch");
@@ -159,10 +143,10 @@ return (_ctx, _cache) => {
               onClick: notifyClose
             }, {
               default: _withCtx(() => [
-                _createVNode(_component_v_icon, { left: "" }, {
-                  default: _withCtx(() => _cache[17] || (_cache[17] = [
-                    _createTextVNode("mdi-close")
-                  ])),
+                _createVNode(_component_v_icon, null, {
+                  default: _withCtx(() => [...(_cache[17] || (_cache[17] = [
+                    _createTextVNode("mdi-close", -1)
+                  ]))]),
                   _: 1
                 })
               ]),
@@ -418,7 +402,7 @@ return (_ctx, _cache) => {
                               "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((config.interval_unit) = $event)),
                               items: intervalUnits,
                               label: "单位",
-                              dense: ""
+                              density: "compact"
                             }, null, 8, ["modelValue"])
                           ]),
                           _: 1
@@ -436,9 +420,9 @@ return (_ctx, _cache) => {
                           type: "info",
                           variant: "tonal"
                         }, {
-                          default: _withCtx(() => _cache[18] || (_cache[18] = [
-                            _createTextVNode(" 以下为tracker映射规则，您可以根据需要修改或添加新的规则。 ")
-                          ])),
+                          default: _withCtx(() => [...(_cache[18] || (_cache[18] = [
+                            _createTextVNode(" 以下为 tracker 映射规则，您可以根据需要修改或添加新的规则。 ", -1)
+                          ]))]),
                           _: 1
                         })
                       ]),
@@ -477,9 +461,9 @@ return (_ctx, _cache) => {
                               default: _withCtx(() => [
                                 (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(config.all_cat, (category, index) => {
                                   return (_openBlock(), _createBlock(_component_v_col, {
+                                    key: index,
                                     cols: "12",
-                                    md: "3",
-                                    key: index
+                                    md: "3"
                                   }, {
                                     default: _withCtx(() => [
                                       _createVNode(_component_v_text_field, {
@@ -501,18 +485,16 @@ return (_ctx, _cache) => {
                       ]),
                       _: 1
                     }))
-                  : _createCommentVNode("", true),
-                (config.rename_type)
-                  ? (_openBlock(), _createBlock(_component_v_row, { key: 1 }, {
+                  : (_openBlock(), _createBlock(_component_v_row, { key: 1 }, {
                       default: _withCtx(() => [
                         _createVNode(_component_v_col, { cols: "12" }, {
                           default: _withCtx(() => [
                             _createVNode(_component_v_textarea, {
-                              label: "按路径自定义分类",
-                              hint: "每一行一个配置，中间以#分隔\r\n                 路径#分类名称",
-                              "persistent-hint": "",
                               modelValue: config.path_rename,
                               "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((config.path_rename) = $event)),
+                              label: "按路径自定义分类",
+                              hint: "每一行一个配置，中间以#分隔：路径#分类名称",
+                              "persistent-hint": "",
                               variant: "filled",
                               "auto-grow": ""
                             }, null, 8, ["modelValue"])
@@ -521,8 +503,7 @@ return (_ctx, _cache) => {
                         })
                       ]),
                       _: 1
-                    }))
-                  : _createCommentVNode("", true),
+                    })),
                 _createVNode(_component_v_divider, { class: "my-4" })
               ]),
               _: 1
@@ -536,9 +517,9 @@ return (_ctx, _cache) => {
               color: "secondary",
               onClick: resetForm
             }, {
-              default: _withCtx(() => _cache[20] || (_cache[20] = [
-                _createTextVNode("重置")
-              ])),
+              default: _withCtx(() => [...(_cache[20] || (_cache[20] = [
+                _createTextVNode("重置", -1)
+              ]))]),
               _: 1
             }),
             (!config.rename_type)
@@ -547,9 +528,9 @@ return (_ctx, _cache) => {
                   color: "warning",
                   onClick: resetCategories
                 }, {
-                  default: _withCtx(() => _cache[21] || (_cache[21] = [
-                    _createTextVNode("重置二级分类")
-                  ])),
+                  default: _withCtx(() => [...(_cache[21] || (_cache[21] = [
+                    _createTextVNode("重置二级分类", -1)
+                  ]))]),
                   _: 1
                 }))
               : _createCommentVNode("", true),
@@ -557,12 +538,12 @@ return (_ctx, _cache) => {
             _createVNode(_component_v_btn, {
               color: "primary",
               disabled: !isFormValid.value,
-              onClick: saveConfig,
-              loading: saving.value
+              loading: saving.value,
+              onClick: saveConfig
             }, {
-              default: _withCtx(() => _cache[22] || (_cache[22] = [
-                _createTextVNode("保存配置")
-              ])),
+              default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
+                _createTextVNode("保存配置", -1)
+              ]))]),
               _: 1
             }, 8, ["disabled", "loading"])
           ]),

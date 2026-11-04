@@ -15,6 +15,7 @@ export default defineConfig({
         vue: {
           requiredVersion: false,
           generate: false,
+          singleton: true,
         },
         vuetify: {
           requiredVersion: false,
@@ -31,47 +32,47 @@ export default defineConfig({
     })
   ],
   build: {
-    target: 'esnext',   // 必须设置为esnext以支持顶层await
-    minify: false,      // 开发阶段建议关闭混淆
-    cssCodeSplit: true, // 改为true以便能分离样式文件
+    target: 'esnext',   // 联邦远程模块需要顶层 await
+    minify: false,      // 开发阶段保留可读性
+    cssCodeSplit: true,
+    outDir: 'dist',
   },
   css: {
-    preprocessorOptions: {
-      scss: {
-        additionalData: '/* 覆盖vuetify样式 */',
-      }
-    },
     postcss: {
       plugins: [
         {
           postcssPlugin: 'internal:charset-removal',
           AtRule: {
-            charset: (atRule) => {
+            charset: atRule => {
               if (atRule.name === 'charset') {
-                atRule.remove();
+                atRule.remove()
               }
             }
           }
         },
         {
+          // 官方范式：来自 vuetify / @mdi 的样式整块丢弃，其余仅过滤 .v- / .mdi- 规则，
+          // 避免插件产物覆盖宿主前端的全局样式。
           postcssPlugin: 'vuetify-filter',
           Root(root) {
-            // 过滤掉所有vuetify相关的CSS
+            const sourcePath = root.source?.input?.file?.replaceAll('\\', '/') || ''
+            if (sourcePath.includes('/node_modules/vuetify/') || sourcePath.includes('/node_modules/@mdi/')) {
+              root.nodes = []
+              return
+            }
             root.walkRules(rule => {
-              if (rule.selector && (
-                  rule.selector.includes('.v-') || 
-                  rule.selector.includes('.mdi-'))) {
-                rule.remove();
+              if (rule.selector && (rule.selector.includes('.v-') || rule.selector.includes('.mdi-'))) {
+                rule.remove()
               }
-            });
+            })
           }
         }
       ]
     }
   },
   server: {
-    port: 5001,   // 使用不同于主应用的端口
-    cors: true,   // 启用CORS
+    port: 5001,
+    cors: true,
     origin: 'http://localhost:5001'
   },
-}) 
+})
