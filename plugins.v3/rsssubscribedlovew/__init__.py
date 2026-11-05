@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.14"
+    plugin_version = "3.1.15"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -202,6 +202,13 @@ class RssSubscribedlovew(_PluginBase):
                 "methods": ["GET"],
                 "auth": "bear",
                 "summary": "忽略该季，后续同季资源不再处理"
+            },
+            {
+                "path": "/set_history_view",
+                "endpoint": self.set_history_view,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "切换决策记录的展开与筛选状态"
             },
             {
                 "path": "/settle",
@@ -434,15 +441,27 @@ class RssSubscribedlovew(_PluginBase):
         }
 
     @staticmethod
-    def _section(title: str, rows: List[dict], empty_text: str = '无') -> dict:
+    def _section(title: str, rows: List[dict], empty_text: str = '无',
+                 actions: Optional[List[dict]] = None) -> dict:
         """全宽单列区块，避免 flex-wrap 导致一行里卡片数量忽多忽少。"""
+        title_node = {
+            'component': 'VCardTitle',
+            'props': {'class': 'text-subtitle-2 text-medium-emphasis'},
+            'text': title,
+        }
+        header = title_node
+        if actions:
+            header = {
+                'component': 'div',
+                'props': {'style': ('display:flex;justify-content:space-between;'
+                                    'align-items:center;flex-wrap:wrap;gap:0.5rem')},
+                'content': [title_node, {'component': 'div', 'content': actions}],
+            }
         return {
             'component': 'VCard',
             'props': {'class': 'mb-3 pa-2', 'variant': 'text'},
             'content': [
-                {'component': 'VCardTitle',
-                 'props': {'class': 'text-subtitle-2 text-medium-emphasis'},
-                 'text': title},
+                header,
                 {'component': 'div', 'props': {
                     'style': 'display:flex;flex-direction:column;gap:0.5rem'},
                  'content': rows or [
@@ -679,8 +698,15 @@ class RssSubscribedlovew(_PluginBase):
             '无',
         ))
 
+        view = self.__hist_view()
+        action_filter = view['filter']
+        matched = [record for record in history
+                   if not action_filter
+                   or str(record.get('action') or '') == action_filter]
+        shown = matched[:200] if view['all'] else matched[:10]
+
         records = []
-        for record in history[:30]:
+        for record in shown:
             records.append({
                 'component': 'VCard',
                 'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
@@ -700,7 +726,30 @@ class RssSubscribedlovew(_PluginBase):
                     ]))),
                 ])
             })
-        blocks.append(self._section('决策记录', records, '暂无决策记录'))
+
+        view_buttons = [
+            self._action_button(
+                label, 'set_history_view',
+                {'show_all': 1 if view['all'] else 0, 'filter': value},
+                'primary' if action_filter == value else 'grey',
+            )
+            for label, value in (('全部', ''), ('已订阅', 'subscribed'),
+                                 ('失败', 'failed'), ('忽略', 'ignored'),
+                                 ('预览', 'dry_run'))
+        ]
+        view_buttons.append(self._action_button(
+            '收起' if view['all'] else '展开全部',
+            'set_history_view',
+            {'show_all': 0 if view['all'] else 1, 'filter': action_filter},
+        ))
+
+        if view['all'] or len(matched) <= len(shown):
+            title = f'决策记录（{len(matched)}）'
+        else:
+            title = f'决策记录（最近 {len(shown)} / {len(matched)}）'
+        if action_filter:
+            title = f'{title} · 已筛选'
+        blocks.append(self._section(title, records, '暂无决策记录', view_buttons))
         return blocks
 
     def get_page(self) -> List[dict]:
@@ -1423,6 +1472,23 @@ class RssSubscribedlovew(_PluginBase):
         state['pending'].pop(key, None)
         self.__save_state(state)
         return schemas.Response(success=True, message="已忽略，后续同季资源不再处理")
+
+    def __hist_view(self) -> Dict[str, Any]:
+        """决策记录的展开与筛选状态；点按钮写入后宿主会自动重新拉取数据页。"""
+        data = self.get_data('hist_view') or {}
+        if not isinstance(data, dict):
+            data = {}
+        return {
+            'all': bool(data.get('all')),
+            'filter': str(data.get('filter') or ''),
+        }
+
+    def set_history_view(self, show_all: str = "", filter: str = ""):
+        self.save_data('hist_view', {
+            'all': str(show_all).strip().lower() in ('1', 'true', 'yes'),
+            'filter': str(filter or ''),
+        })
+        return schemas.Response(success=True, message="已更新视图")
 
     def settle(self, key: str = ""):
         state = self.__load_state()
