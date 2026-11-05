@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.12"
+    plugin_version = "3.1.13"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -1225,8 +1225,11 @@ class RssSubscribedlovew(_PluginBase):
                             platform=winner.get('platform_token') or winner.get('platform'))
             self.__notify('自定义订阅 · 订阅失败', f"{item.get('title')}：{detail or error}")
             return
-        self.__finalize(state, key, item, 'subscribed', reason=reason,
-                        platform=winner.get('platform_token') or winner.get('platform'), subscribe_id=subscribe_id)
+        # detail 是宿主返回的成功提示，附在选优理由后面便于对照
+        reason_text = f"{reason}；{detail}" if detail else reason
+        self.__finalize(state, key, item, 'subscribed', reason=reason_text,
+                        platform=winner.get('platform_token') or winner.get('platform'),
+                        subscribe_id=subscribe_id)
         state['last_run']['settled'] = int(state['last_run'].get('settled') or 0) + 1
 
     def __record(self, state: Dict[str, Any], item: dict, action: str, reason: str = '',
@@ -1280,18 +1283,21 @@ class RssSubscribedlovew(_PluginBase):
             for name, value in (('resolution', resolution), ('quality', quality), ('effect', effect)):
                 if value:
                     kwargs[name] = value
-            subscribe_id, error = SubscribeChain().add(
+            subscribe_id, message = SubscribeChain().add(
                 title=item.get('title'),
                 year=item.get('year'),
                 mtype=MediaType.TV,
                 **kwargs
             )
-            if error or not subscribe_id:
-                return None, 'subscribe_failed', str(error or '宿主未返回订阅 ID')
+            # 宿主成功时同样会返回提示文案（如「新增订阅成功」），
+            # 只有订阅 ID 缺失才是真失败，不能把非空文案当成错误。
+            if not subscribe_id:
+                return None, 'subscribe_failed', str(message or '宿主未返回订阅 ID')
             logger.info(f"添加订阅成功：{item.get('title')} S{item.get('season')} "
                         f"平台={winner.get('platform_token') or winner.get('platform')} "
-                        f"include={kwargs['include']} 剧集组={item.get('episode_group') or '无'}")
-            return subscribe_id, '', ''
+                        f"include={kwargs['include']} 剧集组={item.get('episode_group') or '无'}"
+                        f" 宿主提示={message or '无'}")
+            return subscribe_id, '', str(message or '')
         except Exception as err:
             logger.error(f"添加订阅异常：{str(err)} - {traceback.format_exc()}")
             return None, 'exception', str(err)
