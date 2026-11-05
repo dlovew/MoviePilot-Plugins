@@ -375,9 +375,13 @@ def build_filter_css() -> str:
         'cursor:pointer;user-select:none;}',
         '.rss-filters input:checked+label{background:#1867c0;color:#fff;}',
         '.rss-filter-sep{display:inline-block;width:.75rem;}',
-        '.rss-expand-off{display:none;}',
-        '.rss-page-root:has(#rss-rec-expand:checked) .rss-expand-on{display:none;}',
-        '.rss-page-root:has(#rss-rec-expand:checked) .rss-expand-off{display:inline-flex;}',
+        # 显式提高特异性并加 !important：.rss-filters label 会盖掉
+        # 单纯 .rss-expand-off 的 display:none，导致两个标签同时出现。
+        '.rss-filters label.rss-expand-off{display:none !important;}',
+        '.rss-page-root:has(#rss-rec-expand:checked) label.rss-expand-on'
+        '{display:none !important;}',
+        '.rss-page-root:has(#rss-rec-expand:checked) label.rss-expand-off'
+        '{display:inline-flex !important;background:#1867c0;color:#fff;}',
         '.rss-records{display:flex;flex-direction:column;gap:0.5rem;}',
         '.rss-records .rss-rec:nth-child(n+11){display:none;}',
         '.rss-page-root:has(#rss-rec-expand:checked) '

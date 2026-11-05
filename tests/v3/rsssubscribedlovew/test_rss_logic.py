@@ -249,6 +249,10 @@ def test_build_filter_html_and_css(logic):
     assert 'display:none !important' in css
     assert 'nth-child(n+11)' in css
     assert ':has(#rss-rec-expand:checked)' in css
+    # 「收起」默认必须隐藏，且优先级要高于 .rss-filters label
+    assert '.rss-filters label.rss-expand-off{display:none !important;}' in css
+    assert 'label.rss-expand-on{display:none !important;}' in css
+    assert 'label.rss-expand-off{display:inline-flex !important;' in css
 
 
 def test_candidate_platform_summary(logic):
