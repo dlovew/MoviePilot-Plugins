@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.19"
+    plugin_version = "3.1.20"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -632,14 +632,18 @@ class RssSubscribedlovew(_PluginBase):
                     f"入池 {last.get('ingested', 0)}　结算 {last.get('settled', 0)}　"
                     f"窗口 {self._collect_window_hours}h　"
                     f"{'试运行' if self._dry_run else '正常'}"
-                    f"{reidentified_text}"
+                    f"{reidentified_text}",
+                    css='text-body-2 text-center text-medium-emphasis',
                 ),
-                {'component': 'div', 'props': {'class': 'd-flex flex-wrap mt-1'},
+                {'component': 'div',
+                 'props': {'class': 'd-flex flex-wrap justify-center mt-2'},
                  'content': metrics},
-                {'component': 'VCardActions', 'content': [
-                    self._action_button('刷新全部 RSS', 'run_check', {}),
-                    self._action_button('结算全部候选', 'settle', {}),
-                ]},
+                {'component': 'VCardActions',
+                 'props': {'class': 'justify-center'},
+                 'content': [
+                     self._action_button('刷新全部 RSS', 'run_check', {}),
+                     self._action_button('结算全部候选', 'settle', {}),
+                 ]},
             ]
         }]
 
@@ -776,29 +780,14 @@ class RssSubscribedlovew(_PluginBase):
     def get_page(self) -> List[dict]:
         try:
             blocks = self._runtime_page()
-            # 宿主数据页弹窗宽度固定 80rem，且只有 vue 模式能通过 layout 事件修改；
-            # 这里用 :has() 只收窄包含本插件根节点的那个弹窗，不影响其它插件的弹窗。
-            return [
-                {
-                    'component': 'div',
-                    'props': {'class': 'rss-page-root',
-                              'style': ('width:100%;max-width:840px;margin:0 auto;'
-                                        'padding:0.75rem 0.5rem;box-sizing:border-box')},
-                    'content': blocks,
-                },
-                {
-                    'component': 'div',
-                    'html': ('<style>'
-                             '.v-overlay__content:has(.rss-page-root),'
-                             '.v-overlay__content:has(.v-card .rss-page-root),'
-                             '.v-dialog:has(.rss-page-root)'
-                             '{max-width:60rem !important;}'
-                             '.v-card:has(.rss-page-root)'
-                             '{max-width:60rem !important;margin-left:auto !important;'
-                             'margin-right:auto !important;}'
-                             '</style>'),
-                },
-            ]
+            # 内容随宿主弹窗宽度自适应：窄屏铺满，宽屏最多 72rem 避免单行过长
+            return [{
+                'component': 'div',
+                'props': {'class': 'rss-page-root',
+                          'style': ('width:100%;max-width:72rem;margin:0 auto;'
+                                    'padding:0.75rem 1rem;box-sizing:border-box')},
+                'content': blocks,
+            }]
         except Exception as err:
             logger.error(f"拼装数据页面失败：{str(err)} - {traceback.format_exc()}")
             return [{'component': 'div', 'text': '数据页面加载失败，请查看插件日志'}]
