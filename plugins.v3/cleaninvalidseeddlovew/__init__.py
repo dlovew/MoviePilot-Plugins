@@ -24,7 +24,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
     # 插件图标
     plugin_icon = "clean_a.png"
     # 插件版本
-    plugin_version = "3.0.0"
+    plugin_version = "3.0.1"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -87,6 +87,19 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 return f"{value:.2f} {unit}"
             value /= 1024
         return f"{value:.2f} TB"
+
+    @staticmethod
+    def _is_error_message(message: Any, error_msgs: List[str]) -> bool:
+        """按错误关键词做大小写不敏感的子串匹配。
+
+        qBittorrent 的 tracker 状态并不只有 4（会出现 5），且错误消息常带
+        「(deleted)」之类后缀，因此以消息内容为准，不强制匹配状态码。
+        """
+        text = str(message or "").strip().lower()
+        if not text:
+            return False
+        return any(str(kw).strip().lower() in text
+                   for kw in error_msgs if str(kw).strip())
 
     def init_plugin(self, config: dict = None):
         self.downloader_helper = DownloaderHelper()
@@ -510,7 +523,8 @@ class CleanInvalidSeeddlovew(_PluginBase):
                                     # 过滤掉空字符串
                                     custom_msgs = [msg.strip() for msg in custom_msgs if msg.strip()]
                                     error_msgs = self._error_msg + custom_msgs
-                                    is_error_msg = last_announce_result in error_msgs
+                                    is_error_msg = self._is_error_message(
+                                        last_announce_result, error_msgs)
 
                                     # 仅在更多日志模式下添加调试信息
                                     if self._more_logs:
@@ -857,9 +871,9 @@ class CleanInvalidSeeddlovew(_PluginBase):
                         tracker_status = tracker.get("status")
                         tracker_msg = tracker.get("msg", "") or ""
 
-                        is_error_tracker = (tracker_status == 4) and any(
-                            kw in tracker_msg for kw in error_msgs
-                        )
+                        # 以错误消息为准：qB 会把「种子已删除」报成状态 5，
+                        # 且消息常带 (deleted) 等后缀，不能只看状态码是否等于 4
+                        is_error_tracker = self._is_error_message(tracker_msg, error_msgs)
 
                         if is_error_tracker:
                             is_invalid = True
@@ -870,7 +884,8 @@ class CleanInvalidSeeddlovew(_PluginBase):
                                 )
 
                         # 仅当 tracker 确认连上时才收录到 working 集合，供后续佐证使用
-                        if tracker_status in (2, 3) and not any(kw in tracker_msg for kw in error_msgs):
+                        if tracker_status in (2, 3) and not self._is_error_message(
+                                tracker_msg, error_msgs):
                             is_tracker_working = True
                             working_tracker_set.add(tracker_domian)
 
