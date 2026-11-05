@@ -80,7 +80,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.2.3"
+    plugin_version = "3.2.4"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -797,10 +797,29 @@ class RssSubscribedlovew(_PluginBase):
                 texts.extend(self._collect_texts(item))
         return texts
 
+    def _all_history_lines(self, state: Dict[str, Any]) -> List[str]:
+        """全量决策记录的信息行文本，用于稳定宽度。
+
+        筛选/折叠只改变当前渲染的记录；宽度按全量记录里最长的一行计算，
+        切换筛选按钮时弹窗宽度不再随结果集变化而跳动。
+        """
+        lines: List[str] = []
+        for record in trim_records(state.get('history'), 200):
+            lines.append('　'.join(filter(None, [
+                str(record.get('resource_season_text') or ''),
+                str(record.get('time') or '-'),
+                str(record.get('action') or '-'),
+                str(record.get('platform') or ''),
+                str(record.get('reason') or record.get('error') or ''),
+            ])))
+        return lines
+
     def get_page(self) -> List[dict]:
         try:
             blocks = self._runtime_page()
-            width = content_page_width(self._collect_texts(blocks))
+            width_lines = (self._collect_texts(blocks)
+                           + self._all_history_lines(self.__load_state()))
+            width = content_page_width(width_lines)
             # 宿主对 vuetify 模式固定 80rem 且无宽度事件入口，这里用 :has()
             # 只把包含本插件根节点的弹窗按最长信息行撑开；卡片比弹窗少左右内边距。
             style = (
@@ -815,7 +834,8 @@ class RssSubscribedlovew(_PluginBase):
                     'component': 'div',
                     'props': {'class': 'rss-page-root',
                               'style': ('width:100%;box-sizing:border-box;'
-                                        'padding:0.75rem 1.25rem;overflow-x:auto')},
+                                        'padding:0.75rem 1.25rem;overflow-x:auto;'
+                                        'min-height:20rem')},
                     'content': blocks,
                 },
                 {'component': 'div', 'html': style},
