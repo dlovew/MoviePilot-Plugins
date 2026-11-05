@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.17"
+    plugin_version = "3.1.18"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -775,13 +775,25 @@ class RssSubscribedlovew(_PluginBase):
     def get_page(self) -> List[dict]:
         try:
             blocks = self._runtime_page()
-            # 宽屏下限制阅读宽度并居中；窄屏时 max-width 不生效，自动铺满
-            return [{
-                'component': 'div',
-                'props': {'style': ('width:100%;max-width:840px;margin:0 auto;'
-                                    'padding:0.75rem 0.5rem;box-sizing:border-box')},
-                'content': blocks,
-            }]
+            # 宿主数据页弹窗宽度固定 80rem，且只有 vue 模式能通过 layout 事件修改；
+            # 这里用 :has() 只收窄包含本插件根节点的那个弹窗，不影响其它插件的弹窗。
+            return [
+                {
+                    'component': 'div',
+                    'props': {'class': 'rss-page-root',
+                              'style': ('width:100%;max-width:840px;margin:0 auto;'
+                                        'padding:0.75rem 0.5rem;box-sizing:border-box')},
+                    'content': blocks,
+                },
+                {
+                    'component': 'div',
+                    'html': ('<style>'
+                             '.v-overlay__content:has(.rss-page-root),'
+                             '.v-dialog:has(.rss-page-root)'
+                             '{max-width:60rem !important;}'
+                             '</style>'),
+                },
+            ]
         except Exception as err:
             logger.error(f"拼装数据页面失败：{str(err)} - {traceback.format_exc()}")
             return [{'component': 'div', 'text': '数据页面加载失败，请查看插件日志'}]
