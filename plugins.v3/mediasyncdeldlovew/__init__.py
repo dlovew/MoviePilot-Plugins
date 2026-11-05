@@ -27,7 +27,7 @@ class MediaSyncDeldlovew(_PluginBase):
     # 插件图标
     plugin_icon = "mediasyncdel.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.4"
+    plugin_version = "3.0.5"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -45,6 +45,9 @@ class MediaSyncDeldlovew(_PluginBase):
     _notify = False
     _del_source = False
     _del_history = False
+    # 是否响应「非媒体服务器触发的源文件删除」事件；默认关闭，
+    # 避免手动删整理记录时再次进入删种/辅种链路
+    _sync_download_deleted = False
     _exclude_path = None
     _library_path = None
     _transferhis = None
@@ -62,6 +65,7 @@ class MediaSyncDeldlovew(_PluginBase):
         self._notify = bool(config.get("notify"))
         self._del_source = bool(config.get("del_source"))
         self._del_history = bool(config.get("del_history"))
+        self._sync_download_deleted = bool(config.get("sync_download_deleted"))
         self._exclude_path = config.get("exclude_path") or ""
         self._library_path = config.get("library_path") or ""
         self._default_downloader = None
@@ -80,6 +84,7 @@ class MediaSyncDeldlovew(_PluginBase):
                 "sync_type": self._sync_type,
                 "notify": self._notify,
                 "del_source": self._del_source,
+                "sync_download_deleted": self._sync_download_deleted,
                 "del_history": False,
                 "exclude_path": self._exclude_path,
                 "library_path": self._library_path
@@ -102,7 +107,14 @@ class MediaSyncDeldlovew(_PluginBase):
                 "auth": "bear",
                 "summary": "删除订阅历史记录",
                 "response_model": schemas.Response[None],
-            }
+            },
+            {
+                "path": "/retry_pending",
+                "endpoint": self.retry_pending,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "重试删种失败的待处理种子",
+            },
         ]
 
     def delete_history(self, key: str) -> schemas.Response[None]:
@@ -115,6 +127,32 @@ class MediaSyncDeldlovew(_PluginBase):
         historys = [h for h in historys if h.get("unique") != key]
         self.save_data('history', historys)
         return schemas.Response(success=True, message="删除成功")
+
+    def retry_pending(self) -> schemas.Response[None]:
+        """重试删种失败的待处理种子；整理历史已清理，无需用户手动删记录。"""
+        pending = self.get_data('pending_torrents') or []
+        if not isinstance(pending, list) or not pending:
+            return schemas.Response(success=True, message="没有待处理种子")
+        remaining = []
+        for item in pending:
+            torrent_hash = str(item.get('hash') or '')
+            src = str(item.get('src') or '')
+            if not torrent_hash or not src:
+                continue
+            try:
+                _, success_flag, _ = self.handle_torrent(
+                    type=item.get('type') or '',
+                    src=src,
+                    torrent_hash=torrent_hash)
+                if not success_flag:
+                    remaining.append(item)
+            except Exception as err:
+                logger.warning(f"重试待处理种子 {torrent_hash} 失败：{str(err)}")
+                remaining.append(item)
+        self.save_data('pending_torrents', remaining)
+        return schemas.Response(
+            success=True,
+            message=f"已重试 {len(pending)} 条，剩余 {len(remaining)} 条")
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
@@ -184,6 +222,22 @@ class MediaSyncDeldlovew(_PluginBase):
                                         'props': {
                                             'model': 'del_source',
                                             'label': '删除源文件',
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'sync_download_deleted',
+                                            'label': '响应非媒体库删除（默认关）',
                                         }
                                     }
                                 ]
@@ -286,7 +340,8 @@ class MediaSyncDeldlovew(_PluginBase):
                                             'text': '媒体库同步方式分为Webhook、Scripter X：'
                                                     '1、Webhook需要Emby4.8.0.45及以上开启媒体删除的Webhook。'
                                                     '2、Scripter X方式需要emby安装并配置Scripter X插件，无需配置执行周期。'
-                                                    '3、启用该插件后，非媒体服务器触发的源文件删除，也会同步处理下载器中的下载任务。'
+                                                    '3、「响应非媒体库删除」默认关闭：宿主手动删整理记录时已会处理种子，开启后插件会再处理一次，'
+                                                    '仅在确实需要该兜底时才打开。'
                                         }
                                     }
                                 ]
@@ -390,6 +445,7 @@ class MediaSyncDeldlovew(_PluginBase):
             "enabled": False,
             "notify": True,
             "del_source": False,
+            "sync_download_deleted": False,
             "del_history": False,
             "library_path": "",
             "sync_type": "webhook",
@@ -401,21 +457,45 @@ class MediaSyncDeldlovew(_PluginBase):
         拼装插件详情页面，需要返回页面配置，同时附带数据
         """
         # 查询同步详情
-        historys = self.get_data('history')
-        if not historys:
-            return [
-                {
-                    'component': 'div',
-                    'text': '暂无数据',
-                    'props': {
-                        'class': 'text-center',
-                    }
-                }
-            ]
+        historys = self.get_data('history') or []
+        # 待处理种子：删种失败但整理历史已清理，避免用户再去手动删整理记录
+        pending = self.get_data('pending_torrents') or []
+        if not isinstance(pending, list):
+            pending = []
         # 数据按时间降序排序
         historys = sorted(historys, key=lambda x: str(x.get('del_time') or ""), reverse=True)
         # 拼装页面
         contents = []
+        if pending:
+            pending_lines = [
+                f"{item.get('title') or '-'}　{item.get('hash') or '-'}　{item.get('time') or '-'}"
+                for item in pending[-20:]
+            ]
+            contents.append({
+                'component': 'VCard',
+                'props': {'class': 'mb-3 pa-2', 'variant': 'tonal', 'color': 'warning'},
+                'content': [
+                    {'component': 'VCardTitle',
+                     'props': {'class': 'text-subtitle-2'},
+                     'text': f'待处理种子（{len(pending)}）'},
+                    {'component': 'VCardText',
+                     'props': {'class': 'text-caption'},
+                     'text': '整理记录已清理；这些种子的删除未完成，可重试或到下载器手动处理。'},
+                    *[{'component': 'div',
+                       'props': {'class': 'text-caption'},
+                       'text': line} for line in pending_lines],
+                    {'component': 'VCardActions', 'content': [{
+                        'component': 'VBtn',
+                        'props': {'color': 'primary', 'variant': 'tonal', 'size': 'small'},
+                        'text': '重试未完成种子',
+                        'events': {'click': {
+                            'api': f'plugin/{self.__class__.__name__}/retry_pending',
+                            'method': 'get',
+                            'params': {},
+                        }},
+                    }]},
+                ],
+            })
         for history in historys:
             htype = history.get("type")
             title = history.get("title")
@@ -554,6 +634,13 @@ class MediaSyncDeldlovew(_PluginBase):
                 }
             )
 
+        if not contents:
+            return [{
+                'component': 'div',
+                'text': '暂无数据',
+                'props': {'class': 'text-center'},
+            }]
+
         return [
             {
                 'component': 'div',
@@ -654,6 +741,7 @@ class MediaSyncDeldlovew(_PluginBase):
             self.update_config({
                 "enabled": False,
                 "del_source": self._del_source,
+                "sync_download_deleted": self._sync_download_deleted,
                 "exclude_path": self._exclude_path,
                 "library_path": self._library_path,
                 "notify": self._notify,
@@ -813,14 +901,17 @@ class MediaSyncDeldlovew(_PluginBase):
         del_torrent_hashs = []
         stop_torrent_hashs = []
         error_cnt = 0
+        pending_items = []
         image = 'https://emby.media/notificationicon.png'
         for transferhis in transfer_history:
-            title = transferhis.title
-            if not title or title not in media_name:
-                logger.warning(
-                    f"当前转移记录 {transferhis.id} {title} {transferhis.media_source}:{transferhis.media_id} "
-                    f"与删除媒体{media_name}不符，防误删，暂不自动删除")
-                continue
+            title = transferhis.title or ''
+            # 记录已按 media_source + media_id 精确查询（__get_transfer_his 每个分支
+            # 都要求有效身份），title 只是入库时的快照。TMDB 元数据哪怕一字之差
+            # 也不该让整条记录被跳过，否则会留下孤儿整理记录。
+            if title and title not in media_name:
+                logger.info(
+                    f"转移记录 {transferhis.id} 标题快照「{title}」与删除媒体「{media_name}」不同，"
+                    f"已按媒体身份继续处理")
             image = transferhis.image or image
             year = transferhis.year
             history_delete_ready = True
@@ -864,13 +955,31 @@ class MediaSyncDeldlovew(_PluginBase):
                             history_delete_ready = False
                             logger.error("删除种子失败：%s" % str(e))
 
-            # 整理历史是跨文件系统和下载器清理失败后的重试依据，只能最后删除。
-            if history_delete_ready:
-                self._transferhis.delete(transferhis.id)
-            else:
-                logger.warning(f"外部清理未完成，保留整理历史：{transferhis.id}")
+            # 整理历史无条件删除：留着会诱导用户手动删整理记录，
+            # 进而触发 DownloadFileDeleted 事件二次进入删种/辅种链路。
+            # 删种未完成的条目改记入 pending_torrents，由数据页提供重试入口。
+            self._transferhis.delete(transferhis.id)
+            if not history_delete_ready:
+                pending_items.append({
+                    'title': title or media_name,
+                    'src': transferhis.src or '',
+                    'dest': transferhis.dest or '',
+                    'hash': str(transferhis.download_hash or ''),
+                    'type': transferhis.type or '',
+                    'time': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())),
+                })
+                logger.warning(f"删种未完成，整理历史已清理，待处理种子：{transferhis.download_hash}")
 
-        logger.info(f"同步删除 {msg} 完成！")
+        if pending_items:
+            pending = self.get_data('pending_torrents') or []
+            if not isinstance(pending, list):
+                pending = []
+            pending.extend(pending_items)
+            self.save_data('pending_torrents', pending[-200:])
+
+        logger.info(
+            f"同步删除 {msg} 完成：处理 {len(transfer_history)} 条整理记录，"
+            f"删种失败 {error_cnt} 条（已转入待处理列表）")
 
         media_type = MediaType.MOVIE if media_type in ["Movie", "MOV"] else MediaType.TV
 
@@ -898,7 +1007,9 @@ class MediaSyncDeldlovew(_PluginBase):
                 if stop_cnt > 0:
                     torrent_cnt_msg += f"暂停种子{stop_cnt}个\n"
             if error_cnt:
-                torrent_cnt_msg += f"删种失败{error_cnt}个\n"
+                torrent_cnt_msg += (
+                    f"删种失败 {error_cnt} 个：整理记录已清理，待处理种子可在数据页重试\n"
+                )
             # 发送通知
             self.post_message(
                 mtype=MessageType.Plugin,
@@ -1193,51 +1304,62 @@ class MediaSyncDeldlovew(_PluginBase):
                                                                    delete_flag=delete_flag,
                                                                    handle_torrent_hashs=handle_torrent_hashs)
         except Exception as e:
-            logger.error(f"处理 {torrent_hash} 合集失败")
-            print(str(e))
+            logger.error(f"处理 {torrent_hash} 合集失败：{str(e)}")
 
         return handle_torrent_hashs
 
-    def __del_seed(self, download_id, delete_flag, handle_torrent_hashs):
+    def __del_seed(self, download_id, delete_flag, handle_torrent_hashs, visited=None):
         """
-        删除辅种
+        删除辅种。
+
+        辅种历史常出现双向引用（A 的辅种含 B、B 的辅种又含 A），旧实现无保护地
+        递归「辅种的辅种」，会无限递归直至 RecursionError。这里用 visited 打破环，
+        并对已处理过的 hash 去重。
         """
-        # 查询是否有辅种记录
+        if visited is None:
+            visited = set()
+        key = str(download_id)
+        if key in visited:
+            return handle_torrent_hashs
+        visited.add(key)
+
         history_key = download_id
         plugin_id = "IYUUAutoSeed"
         seed_history = self.get_data(key=history_key,
                                      plugin_id=plugin_id) or []
         logger.info(f"查询到 {history_key} 辅种历史 {seed_history}")
 
-        # 有辅种记录则处理辅种
         if seed_history and isinstance(seed_history, list):
             for history in seed_history:
+                if not isinstance(history, dict):
+                    continue
                 downloader = history.get("downloader")
                 torrents = history.get("torrents")
                 if not downloader or not torrents:
-                    return
+                    continue
                 if not isinstance(torrents, list):
                     torrents = [torrents]
 
-                # 删除辅种历史
                 for torrent in torrents:
-                    handle_torrent_hashs.append(torrent)
-                    # 删除辅种
+                    torrent_key = str(torrent)
+                    if torrent_key in visited:
+                        continue
+                    if torrent_key not in [str(x) for x in handle_torrent_hashs]:
+                        handle_torrent_hashs.append(torrent)
                     if delete_flag:
                         logger.info(f"删除辅种：{downloader} - {torrent}")
                         self.chain.remove_torrents(hashs=torrent,
                                                    downloader=downloader)
-                    # 暂停辅种
                     else:
                         self.chain.stop_torrents(hashs=torrent, downloader=downloader)
                         logger.info(f"辅种：{downloader} - {torrent} 暂停")
 
-                    # 处理辅种的辅种
-                    handle_torrent_hashs = self.__del_seed(download_id=torrent,
-                                                           delete_flag=delete_flag,
-                                                           handle_torrent_hashs=handle_torrent_hashs)
+                    handle_torrent_hashs = self.__del_seed(
+                        download_id=torrent,
+                        delete_flag=delete_flag,
+                        handle_torrent_hashs=handle_torrent_hashs,
+                        visited=visited)
 
-            # 删除辅种历史
             if delete_flag:
                 self.del_data(key=history_key,
                               plugin_id=plugin_id)
@@ -1253,9 +1375,9 @@ class MediaSyncDeldlovew(_PluginBase):
     @eventmanager.register(EventType.DownloadFileDeleted)
     def downloadfile_del_sync(self, event: Event):
         """
-        下载文件删除处理事件
+        下载文件删除处理事件（默认关闭，避免手动删整理记录时重复进入删种链路）
         """
-        if not event:
+        if not self._enabled or not self._sync_download_deleted or not event:
             return
         event_data = event.event_data
         src = event_data.get("src")
