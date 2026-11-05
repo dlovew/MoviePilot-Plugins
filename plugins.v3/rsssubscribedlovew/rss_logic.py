@@ -328,6 +328,71 @@ def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> st
     return f"{seconds / 86400:.1f} 天"
 
 
+HISTORY_FILTERS = (
+    ('all', '全部', ''),
+    ('subscribed', '已订阅', 'subscribed'),
+    ('failed', '失败', 'failed'),
+    ('ignored', '忽略', 'ignored'),
+    ('dry_run', '预览', 'dry_run'),
+)
+
+
+def build_filter_html() -> str:
+    """生成纯 CSS 筛选控件。
+
+    radio/label 不绑定任何 ``events``，点击只改变 checked 状态，
+    不会触发 PageRender.commonAction 的进度弹窗与整页重载，因此零闪动。
+    """
+    radios = []
+    for key, label, _ in HISTORY_FILTERS:
+        checked = ' checked' if key == 'all' else ''
+        radios.append(
+            f'<input type="radio" name="rss-rec-filter" id="rss-f-{key}"{checked}>'
+            f'<label for="rss-f-{key}">{label}</label>'
+        )
+    return (
+        '<div class="rss-filters">'
+        + ''.join(radios)
+        + '<span class="rss-filter-sep"></span>'
+        + '<input type="checkbox" id="rss-rec-expand">'
+        + '<label for="rss-rec-expand" class="rss-expand-on">展开全部</label>'
+        + '<label for="rss-rec-expand" class="rss-expand-off">收起</label>'
+        + '</div>'
+    )
+
+
+def build_filter_css() -> str:
+    """生成筛选显隐规则。
+
+    筛选隐藏用 ``!important``，优先于「展开全部」把第 11 条之后恢复显示，
+    避免同时选中筛选与展开时把不匹配的记录也显示出来。
+    """
+    rules = [
+        '.rss-filters input{position:absolute;opacity:0;width:0;height:0;}',
+        '.rss-filters label{display:inline-flex;align-items:center;'
+        'padding:0.2rem 0.7rem;margin:0.15rem;border-radius:999px;'
+        'background:rgba(128,128,128,.16);font-size:.75rem;'
+        'cursor:pointer;user-select:none;}',
+        '.rss-filters input:checked+label{background:#1867c0;color:#fff;}',
+        '.rss-filter-sep{display:inline-block;width:.75rem;}',
+        '.rss-expand-off{display:none;}',
+        '.rss-page-root:has(#rss-rec-expand:checked) .rss-expand-on{display:none;}',
+        '.rss-page-root:has(#rss-rec-expand:checked) .rss-expand-off{display:inline-flex;}',
+        '.rss-records{display:flex;flex-direction:column;gap:0.5rem;}',
+        '.rss-records .rss-rec:nth-child(n+11){display:none;}',
+        '.rss-page-root:has(#rss-rec-expand:checked) '
+        '.rss-records .rss-rec:nth-child(n+11){display:block;}',
+    ]
+    for key, _, action in HISTORY_FILTERS:
+        if not action:
+            continue
+        rules.append(
+            f'.rss-page-root:has(#rss-f-{key}:checked) '
+            f'.rss-rec:not(.rss-rec-{action}){{display:none !important;}}'
+        )
+    return ''.join(rules)
+
+
 def estimate_line_width(text: Any) -> int:
     """按 text-caption（12px）估算一行不换行文本的像素宽度。
 

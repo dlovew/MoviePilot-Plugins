@@ -30,6 +30,8 @@ try:
         DEFAULT_TIER3_PLATFORMS,
         build_include,
         build_tier_rules,
+        build_filter_css,
+        build_filter_html,
         candidate_platform_items,
         choose_best,
         content_page_width,
@@ -53,6 +55,8 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         DEFAULT_TIER3_PLATFORMS,
         build_include,
         build_tier_rules,
+        build_filter_css,
+        build_filter_html,
         candidate_platform_items,
         choose_best,
         content_page_width,
@@ -80,7 +84,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.2.4"
+    plugin_version = "3.2.5"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -723,63 +727,46 @@ class RssSubscribedlovew(_PluginBase):
             '无',
         ))
 
-        view = self.__hist_view()
-        action_filter = view['filter']
-        matched = [record for record in history
-                   if not action_filter
-                   or str(record.get('action') or '') == action_filter]
-        shown = matched[:200] if view['all'] else matched[:10]
-
+        # 一次性渲染全部决策记录，筛选/展开交给纯 CSS（radio + :has()）。
+        # 控件不带 events，点击不触发进度弹窗与整页重载，因此切换零闪动。
         records = []
-        for record in shown:
+        for record in history:
+            action = str(record.get('action') or 'unknown')
             records.append({
-                'component': 'VCard',
-                'props': {'class': 'pa-3', 'variant': 'tonal', 'rounded': 'lg'},
-                'content': self._with_poster(record.get('poster'), [
-                    self._header_row(
-                        self._tmdb_title(str(record.get('title') or record.get('key') or '-'),
-                                         record.get('tmdbid')),
-                        [self._action_button('删除', 'delete_history',
-                                            {'key': record.get('id') or ''}, 'error')],
-                    ),
-                    self._text_line('　'.join(filter(None, [
-                        str(record.get('resource_season_text') or ''),
-                        str(record.get('time') or '-'),
-                        str(record.get('action') or '-'),
-                        str(record.get('platform') or ''),
-                        str(record.get('reason') or record.get('error') or ''),
-                    ]))),
-                ])
+                'component': 'div',
+                'props': {'class': f'rss-rec rss-rec-{action}'},
+                'content': [{
+                    'component': 'VCard',
+                    'props': {'class': 'pa-3', 'variant': 'tonal', 'rounded': 'lg'},
+                    'content': self._with_poster(record.get('poster'), [
+                        self._header_row(
+                            self._tmdb_title(
+                                str(record.get('title') or record.get('key') or '-'),
+                                record.get('tmdbid')),
+                            [self._action_button('删除', 'delete_history',
+                                                {'key': record.get('id') or ''}, 'error')],
+                        ),
+                        self._text_line('　'.join(filter(None, [
+                            str(record.get('resource_season_text') or ''),
+                            str(record.get('time') or '-'),
+                            str(record.get('action') or '-'),
+                            str(record.get('platform') or ''),
+                            str(record.get('reason') or record.get('error') or ''),
+                        ]))),
+                    ])
+                }],
             })
-
-        view_buttons = [
-            self._action_button(
-                label, 'set_history_view',
-                {'show_all': 1 if view['all'] else 0, 'filter': value},
-                'primary' if action_filter == value else 'grey',
-            )
-            for label, value in (('全部', ''), ('已订阅', 'subscribed'),
-                                 ('失败', 'failed'), ('忽略', 'ignored'),
-                                 ('预览', 'dry_run'))
-        ]
-        # 只有确实还有更多记录时才显示展开/收起，避免记录不足 10 条时点了没反应
-        if len(matched) > 10:
-            view_buttons.append(self._action_button(
-                '收起' if view['all'] else '展开全部',
-                'set_history_view',
-                {'show_all': 0 if view['all'] else 1, 'filter': action_filter},
-            ))
-
-        total = len(matched)
-        if view['all']:
-            title = f'决策记录（全部 {total} 条）'
-        elif total > 10:
-            title = f'决策记录（最近 {len(shown)} / 共 {total} 条）'
-        else:
-            title = f'决策记录（共 {total} 条）'
-        if action_filter:
-            title = f'{title} · 已筛选'
-        blocks.append(self._section(title, records, '暂无决策记录', view_buttons))
+        filter_node = {'component': 'div', 'html': build_filter_html()}
+        records_node = {
+            'component': 'div',
+            'props': {'class': 'rss-records'},
+            'content': records or [
+                {'component': 'div', 'props': {'class': 'text-caption'},
+                 'text': '暂无决策记录'}
+            ],
+        }
+        title = f'决策记录（共 {len(history)} 条）· 点击标签筛选'
+        blocks.append(self._section(title, [filter_node, records_node]))
         return blocks
 
     def _collect_texts(self, blocks: Any) -> List[str]:
@@ -827,7 +814,8 @@ class RssSubscribedlovew(_PluginBase):
                 f'.v-overlay__content:has(.rss-page-root)'
                 f'{{width:{width}px !important;'
                 f'max-width:min({width}px,calc(100vw - 3rem)) !important;}}'
-                '</style>'
+                + build_filter_css()
+                + '</style>'
             )
             return [
                 {

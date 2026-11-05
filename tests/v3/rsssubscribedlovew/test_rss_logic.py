@@ -235,6 +235,22 @@ def test_content_page_width(logic):
     assert logic.content_page_width([line]) >= logic.estimate_line_width(line) + 198
 
 
+def test_build_filter_html_and_css(logic):
+    html = logic.build_filter_html()
+    css = logic.build_filter_css()
+    for key, label, _ in logic.HISTORY_FILTERS:
+        assert f'id="rss-f-{key}"' in html
+        assert label in html
+    assert 'id="rss-f-all" checked' in html
+    assert 'name="rss-rec-filter"' in html
+    assert 'type="checkbox" id="rss-rec-expand"' in html
+    assert ':has(#rss-f-failed:checked)' in css
+    assert '.rss-rec:not(.rss-rec-failed)' in css
+    assert 'display:none !important' in css
+    assert 'nth-child(n+11)' in css
+    assert ':has(#rss-rec-expand:checked)' in css
+
+
 def test_candidate_platform_summary(logic):
     candidates = [
         {"platform_token": "LINETV", "team": "UBWEB"},
