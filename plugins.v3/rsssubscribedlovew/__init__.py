@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.16"
+    plugin_version = "3.1.17"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -393,7 +393,8 @@ class RssSubscribedlovew(_PluginBase):
     def _action_button(self, label: str, action: str, params: dict, color: str = 'primary') -> dict:
         return {
             'component': 'VBtn',
-            'props': {'color': color, 'variant': 'tonal', 'size': 'small', 'class': 'ma-1'},
+            'props': {'color': color, 'variant': 'tonal', 'size': 'small',
+                      'class': 'ml-1 mb-1'},
             'text': label,
             'events': {
                 'click': {
@@ -443,10 +444,10 @@ class RssSubscribedlovew(_PluginBase):
     @staticmethod
     def _section(title: str, rows: List[dict], empty_text: str = '无',
                  actions: Optional[List[dict]] = None) -> dict:
-        """全宽单列区块，避免 flex-wrap 导致一行里卡片数量忽多忽少。"""
+        """区块用普通容器而非 VCard 外壳，标题与条目卡对齐到同一左边界。"""
         title_node = {
-            'component': 'VCardTitle',
-            'props': {'class': 'text-subtitle-2 text-medium-emphasis'},
+            'component': 'div',
+            'props': {'class': 'text-subtitle-2 font-weight-medium text-medium-emphasis'},
             'text': title,
         }
         header = title_node
@@ -458,14 +459,16 @@ class RssSubscribedlovew(_PluginBase):
                 'content': [title_node, {'component': 'div', 'content': actions}],
             }
         return {
-            'component': 'VCard',
-            'props': {'class': 'mb-3 pa-2', 'variant': 'text'},
+            'component': 'div',
+            'props': {'class': 'mb-5'},
             'content': [
                 header,
-                {'component': 'div', 'props': {
-                    'style': 'display:flex;flex-direction:column;gap:0.5rem'},
+                {'component': 'div',
+                 'props': {'class': 'mt-2',
+                           'style': 'display:flex;flex-direction:column;gap:0.5rem'},
                  'content': rows or [
-                     {'component': 'VCardText', 'props': {'class': 'text-caption'},
+                     {'component': 'div',
+                      'props': {'class': 'text-caption text-medium-emphasis py-2'},
                       'text': empty_text}
                  ]},
             ]
@@ -492,7 +495,7 @@ class RssSubscribedlovew(_PluginBase):
             return content
         return [{
             'component': 'div',
-            'props': {'style': 'display:flex;gap:0.75rem;align-items:flex-start'},
+            'props': {'style': 'display:flex;gap:0.875rem;align-items:flex-start'},
             'content': [
                 {'component': 'VImg',
                  'props': {
@@ -500,7 +503,7 @@ class RssSubscribedlovew(_PluginBase):
                      'width': 64,
                      'aspectRatio': '2/3',
                      'cover': True,
-                     'class': 'rounded',
+                     'class': 'rounded-lg',
                      'style': 'flex:0 0 auto',
                  }},
                 {'component': 'div',
@@ -518,13 +521,13 @@ class RssSubscribedlovew(_PluginBase):
             tv_id = 0
         if not tv_id:
             return {'component': 'div',
-                    'props': {'class': 'text-subtitle-1 font-weight-medium'},
+                    'props': {'class': 'text-body-1 font-weight-medium'},
                     'text': title}
         base = f'https://www.themoviedb.org/tv/{tv_id}'
         links = [{
             'component': 'a',
             'props': {'href': base, 'target': '_blank', 'rel': 'noopener noreferrer',
-                      'class': ('text-subtitle-1 font-weight-medium text-primary '
+                      'class': ('text-body-1 font-weight-medium text-primary '
                                 'text-decoration-none')},
             'text': f'{title} ↗',
         }]
@@ -558,7 +561,7 @@ class RssSubscribedlovew(_PluginBase):
                 'component': 'VChip',
                 'props': {
                     'size': 'small',
-                    'class': 'ma-1',
+                    'class': 'mr-1 mt-1',
                     'color': 'warning' if unknown else 'primary',
                     'variant': 'flat' if unknown else 'tonal',
                 },
@@ -606,21 +609,32 @@ class RssSubscribedlovew(_PluginBase):
                             and not item.get('episode_group'))
         reidentified = int(last.get('reidentified') or 0)
         reidentified_text = f"　重识别 {reidentified}" if reidentified else ''
+        metrics = []
+        for label, color in (
+            (f"等待中 {len(pending)}", 'primary'),
+            (f"待选剧集组 {group_pending}", 'warning' if group_pending else 'grey'),
+            (f"待重试 {len(retry)}", 'error' if retry else 'grey'),
+            (f"已处理 {len(state['handled'])}", 'grey'),
+        ):
+            metrics.append({
+                'component': 'VChip',
+                'props': {'size': 'small', 'variant': 'flat', 'class': 'mr-1 mb-1',
+                          'color': color},
+                'text': label,
+            })
         blocks: List[dict] = [{
             'component': 'VCard',
-            'props': {'class': 'mb-3 pa-2', 'variant': 'tonal'},
+            'props': {'class': 'pa-3 mb-4', 'variant': 'tonal', 'rounded': 'lg'},
             'content': [
                 self._text_line(
                     f"最近运行 {last.get('time') or '尚未运行'}　"
                     f"入池 {last.get('ingested', 0)}　结算 {last.get('settled', 0)}　"
                     f"窗口 {self._collect_window_hours}h　"
                     f"{'试运行' if self._dry_run else '正常'}"
-                ),
-                self._text_line(
-                    f"等待中 {len(pending)}　待选剧集组 {group_pending}　"
-                    f"待重试 {len(retry)}　已处理 {len(state['handled'])}"
                     f"{reidentified_text}"
                 ),
+                {'component': 'div', 'props': {'class': 'd-flex flex-wrap mt-1'},
+                 'content': metrics},
                 {'component': 'VCardActions', 'content': [
                     self._action_button('刷新全部 RSS', 'run_check', {}),
                     self._action_button('结算全部候选', 'settle', {}),
@@ -635,7 +649,8 @@ class RssSubscribedlovew(_PluginBase):
             groups = item.get('group_candidates') or []
             group_rows.append({
                 'component': 'VCard',
-                'props': {'class': 'mb-2 pa-3', 'variant': 'outlined', 'color': 'warning'},
+                'props': {'class': 'pa-3', 'variant': 'tonal', 'color': 'warning',
+                          'rounded': 'lg'},
                 'content': self._with_poster(item.get('poster'), [
                     self._header_row(
                         self._tmdb_title(str(item.get('title') or key), item.get('tmdbid'),
@@ -665,7 +680,7 @@ class RssSubscribedlovew(_PluginBase):
                            and not item.get('episode_group') else '等待窗口到期')
             waiting.append({
                 'component': 'VCard',
-                'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
+                'props': {'class': 'pa-3', 'variant': 'tonal', 'rounded': 'lg'},
                 'content': self._with_poster(item.get('poster'), [
                     self._header_row(
                         self._tmdb_title(str(item.get('title') or key), item.get('tmdbid')),
@@ -709,7 +724,7 @@ class RssSubscribedlovew(_PluginBase):
         for record in shown:
             records.append({
                 'component': 'VCard',
-                'props': {'class': 'mb-2 pa-3', 'variant': 'tonal'},
+                'props': {'class': 'pa-3', 'variant': 'tonal', 'rounded': 'lg'},
                 'content': self._with_poster(record.get('poster'), [
                     self._header_row(
                         self._tmdb_title(str(record.get('title') or record.get('key') or '-'),
@@ -763,8 +778,8 @@ class RssSubscribedlovew(_PluginBase):
             # 宽屏下限制阅读宽度并居中；窄屏时 max-width 不生效，自动铺满
             return [{
                 'component': 'div',
-                'props': {'style': ('width:100%;max-width:960px;margin:0 auto;'
-                                    'box-sizing:border-box')},
+                'props': {'style': ('width:100%;max-width:840px;margin:0 auto;'
+                                    'padding:0.75rem 0.5rem;box-sizing:border-box')},
                 'content': blocks,
             }]
         except Exception as err:
