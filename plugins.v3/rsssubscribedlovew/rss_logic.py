@@ -328,6 +328,33 @@ def elapsed_text(first_seen: Any, now: Optional[datetime.datetime] = None) -> st
     return f"{seconds / 86400:.1f} 天"
 
 
+def estimate_line_width(text: Any) -> int:
+    """按 text-caption（12px）估算一行不换行文本的像素宽度。
+
+    中文/全角字符按 12px、半角按 7px；用于在没有浏览器测量能力时
+    按最长信息行决定数据页宽度，宁可略宽也不要截断。
+    """
+    width = 0
+    for char in str(text or ''):
+        code = ord(char)
+        if char == '\t':
+            width += 28
+        elif code > 0x2E80:
+            width += 12
+        else:
+            width += 7
+    return width
+
+
+def content_page_width(lines: Any, min_width: int = 480,
+                       max_width: int = 1400) -> int:
+    """按最长信息行估算弹窗宽度；常数对应封面、间距与内外边距。"""
+    longest = max((estimate_line_width(line) for line in (lines or [])), default=0)
+    # 封面 64 + 间距 14 + 卡片左右内边距 24 + 页面左右内边距 40 + 弹窗余量 16
+    needed = longest + 64 + 14 + 24 + 40 + 16
+    return max(min(int(needed), int(max_width)), int(min_width))
+
+
 def candidate_platform_items(candidates: Any, limit: int = 8) -> List[Dict[str, Any]]:
     """按「平台-制作组」归并候选，附带等效体积与原始标题。
 

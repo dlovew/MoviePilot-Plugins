@@ -32,6 +32,7 @@ try:
         build_tier_rules,
         candidate_platform_items,
         choose_best,
+        content_page_width,
         detect_platforms,
         elapsed_text,
         group_type_label,
@@ -54,6 +55,7 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         build_tier_rules,
         candidate_platform_items,
         choose_best,
+        content_page_width,
         detect_platforms,
         elapsed_text,
         group_type_label,
@@ -78,7 +80,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.2.1"
+    plugin_version = "3.2.2"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -224,20 +226,6 @@ class RssSubscribedlovew(_PluginBase):
                 "auth": "bear",
                 "summary": "立即刷新全部 RSS 链接"
             },
-            {
-                "path": "/runtime_data",
-                "endpoint": self.runtime_data,
-                "methods": ["GET"],
-                "auth": "bear",
-                "summary": "供 vue 数据页读取结构化运行状态"
-            },
-            {
-                "path": "/platform_options",
-                "endpoint": self.platform_options,
-                "methods": ["GET"],
-                "auth": "bear",
-                "summary": "供 vue 配置页读取平台多选框选项"
-            },
         ]
 
     def get_service(self) -> List[Dict[str, Any]]:
@@ -286,19 +274,7 @@ class RssSubscribedlovew(_PluginBase):
             }]
         }
 
-    @staticmethod
-    def get_render_mode() -> Tuple[str, str]:
-        """V3 联邦渲染模式。删除本方法，并把 _vuetify_form / _vuetify_page
-        改回 get_form / get_page，即可完整回滚到 vuetify JSON 页面。"""
-        return "vue", "dist/assets"
-
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        """vue 模式只回传配置模型，宿主通过 initialConfig 注入 Config.vue。"""
-        _, model = self._vuetify_form()
-        return [], model
-
-    def _vuetify_form(self) -> Tuple[List[dict], Dict[str, Any]]:
-        """保留的 vuetify JSON 配置页，供快速回滚使用。"""
         switches = [
             self._field('VSwitch', 'enabled', '启用插件'),
             self._field('VSwitch', 'notify', '发送通知'),
@@ -512,7 +488,10 @@ class RssSubscribedlovew(_PluginBase):
 
     @staticmethod
     def _text_line(text: str, css: str = 'text-caption text-medium-emphasis') -> dict:
-        return {'component': 'div', 'props': {'class': css}, 'text': text}
+        # 信息行不换行，作为按内容撑开宽度的锚点
+        return {'component': 'div',
+                'props': {'class': css, 'style': 'white-space:nowrap'},
+                'text': text}
 
     @staticmethod
     def _with_poster(poster: Any, content: List[dict]) -> List[dict]:
@@ -803,49 +782,44 @@ class RssSubscribedlovew(_PluginBase):
         blocks.append(self._section(title, records, '暂无决策记录', view_buttons))
         return blocks
 
-    def platform_options(self) -> List[dict]:
-        """供 Config.vue 的平台多选框使用：默认词表 + 自定义缩写 + 已勾选值。"""
-        return self.__platform_items()
-
-    def runtime_data(self) -> Dict[str, Any]:
-        """供 Page.vue 渲染的结构化只读数据，不改动任何持久化状态。"""
-        state = self.__load_state()
-        pending = []
-        for key, item in (state.get('pending') or {}).items():
-            record = dict(item) if isinstance(item, dict) else {}
-            record['key'] = key
-            if not isinstance(record.get('candidates'), list):
-                record['candidates'] = []
-            pending.append(record)
-        return {
-            'version': self.plugin_version,
-            'last_run': state.get('last_run') or {},
-            'pending': pending,
-            'history': trim_records(state.get('history'), 200),
-            'retry': trim_records(state.get('retry'), 200),
-            'handled_count': len(state.get('handled') or []),
-            'config': {
-                'collect_window_hours': self._collect_window_hours,
-                'dry_run': self._dry_run,
-            },
-        }
+    def _collect_texts(self, blocks: Any) -> List[str]:
+        """递归收集页面 JSON 里的可见文本，用于估算最长信息行。"""
+        texts: List[str] = []
+        if isinstance(blocks, dict):
+            value = blocks.get('text')
+            if isinstance(value, str) and value:
+                texts.append(value)
+            content = blocks.get('content')
+            if isinstance(content, (list, tuple)):
+                texts.extend(self._collect_texts(content))
+        elif isinstance(blocks, (list, tuple)):
+            for item in blocks:
+                texts.extend(self._collect_texts(item))
+        return texts
 
     def get_page(self) -> List[dict]:
-        """vue 模式：页面内容由 ./Page 组件通过 /runtime_data 获取。"""
-        return []
-
-    def _vuetify_page(self) -> List[dict]:
-        """保留的 vuetify JSON 数据页，供快速回滚使用。"""
         try:
             blocks = self._runtime_page()
-            # 内容随宿主弹窗宽度自适应：窄屏铺满，宽屏最多 72rem 避免单行过长
-            return [{
-                'component': 'div',
-                'props': {'class': 'rss-page-root',
-                          'style': ('width:100%;max-width:72rem;margin:0 auto;'
-                                    'padding:0.75rem 1rem;box-sizing:border-box')},
-                'content': blocks,
-            }]
+            width = content_page_width(self._collect_texts(blocks))
+            # 宿主对 vuetify 模式固定 80rem 且无宽度事件入口，这里用 :has()
+            # 只把包含本插件根节点的弹窗按最长信息行撑开；卡片比弹窗少左右内边距。
+            style = (
+                '<style>'
+                f'.v-overlay__content:has(.rss-page-root)'
+                f'{{width:{width}px !important;'
+                f'max-width:min({width}px,calc(100vw - 3rem)) !important;}}'
+                '</style>'
+            )
+            return [
+                {
+                    'component': 'div',
+                    'props': {'class': 'rss-page-root',
+                              'style': ('width:100%;box-sizing:border-box;'
+                                        'padding:0.75rem 1.25rem;overflow-x:auto')},
+                    'content': blocks,
+                },
+                {'component': 'div', 'html': style},
+            ]
         except Exception as err:
             logger.error(f"拼装数据页面失败：{str(err)} - {traceback.format_exc()}")
             return [{'component': 'div', 'text': '数据页面加载失败，请查看插件日志'}]

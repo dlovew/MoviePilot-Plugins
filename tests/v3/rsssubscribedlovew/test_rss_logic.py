@@ -217,6 +217,21 @@ def test_elapsed_text(logic):
     assert logic.elapsed_text("bad") == "未知"
 
 
+def test_estimate_line_width(logic):
+    assert logic.estimate_line_width("") == 0
+    assert logic.estimate_line_width("中文") == 24
+    assert logic.estimate_line_width("abc") == 21
+    assert logic.estimate_line_width("\t") == 28
+
+
+def test_content_page_width(logic):
+    assert logic.content_page_width([]) == 480
+    short = logic.content_page_width(["S01E01"])
+    long = logic.content_page_width(["S01E01", "手动忽略该季，后续不再处理" * 5])
+    assert long > short
+    assert logic.content_page_width(["x" * 10000]) == 1400
+
+
 def test_candidate_platform_summary(logic):
     candidates = [
         {"platform_token": "LINETV", "team": "UBWEB"},
