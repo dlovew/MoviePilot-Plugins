@@ -6,7 +6,7 @@
  * 参数拼在 query 上，操作完成后自行刷新，不依赖宿主的整页重载。
  * onMounted 声明宿主弹窗宽度，只影响本插件。
  */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 
 const props = defineProps({
   api: { type: [Object, Function], required: true },
@@ -22,6 +22,8 @@ const data = ref(null)
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
+const pageRef = ref(null)
+const pageWidth = ref(0)
 
 const showAllHistory = ref(false)
 const historyFilter = ref('')
@@ -104,6 +106,25 @@ function statusLabel(item) {
     ? '待选剧集组' : '等待窗口到期'
 }
 
+/** 按最长信息行测量自然宽度，让记录卡片与宿主弹窗一起随内容变宽。 */
+function measureWidth() {
+  nextTick(() => {
+    const root = pageRef.value
+    if (!root) return
+    let longest = 0
+    for (const el of root.querySelectorAll('.rss-line, .rss-status')) {
+      longest = Math.max(longest, el.scrollWidth || 0)
+    }
+    const viewport = typeof window !== 'undefined' ? window.innerWidth : 1200
+    // 封面 64 + 间距 14 + 卡片左右内边距 24 + 页面左右内边距 40
+    const needed = Math.max(longest, 260) + 64 + 14 + 24 + 40
+    const cap = Math.max(viewport - 48, 320)
+    pageWidth.value = Math.max(Math.min(needed, cap), 480)
+    // 弹窗比记录卡片再宽一点
+    emit('layout', { maxWidth: `${pageWidth.value + 16}px` })
+  })
+}
+
 async function loadData() {
   if (!pluginId.value) {
     error.value = '未获取到插件实例 ID，无法读取运行状态'
@@ -118,6 +139,7 @@ async function loadData() {
     error.value = err?.message || '读取运行状态失败'
   } finally {
     loading.value = false
+    measureWidth()
   }
 }
 
@@ -151,13 +173,14 @@ function onCopyFocus(event) {
 }
 
 onMounted(() => {
-  emit('layout', { maxWidth: '60rem' })
+  // 加载期间的兜底值；数据渲染后由 measureWidth 按实际内容覆盖
+  emit('layout', { maxWidth: '48rem' })
   void loadData()
 })
 </script>
 
 <template>
-  <div class="rss-page">
+  <div ref="pageRef" class="rss-page" :style="pageWidth ? { width: pageWidth + 'px' } : null">
     <v-alert v-if="error" type="warning" variant="tonal" density="compact" class="mb-3">{{ error }}</v-alert>
     <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-3" />
 
@@ -298,7 +321,10 @@ onMounted(() => {
 <style scoped>
 .rss-page {
   width: 100%;
+  max-width: calc(100vw - 3rem);
   box-sizing: border-box;
+  padding: 0.75rem 1.25rem;
+  overflow-x: auto;
 }
 .rss-section {
   margin-bottom: 1.25rem;
@@ -314,6 +340,7 @@ onMounted(() => {
 }
 .rss-status {
   opacity: 0.8;
+  white-space: nowrap;
 }
 .rss-metrics,
 .rss-chips,
@@ -373,7 +400,7 @@ onMounted(() => {
   font-size: 0.75rem;
   opacity: 0.75;
   margin-top: 0.25rem;
-  word-break: break-word;
+  white-space: nowrap;
 }
 .rss-group-pick {
   display: flex;
