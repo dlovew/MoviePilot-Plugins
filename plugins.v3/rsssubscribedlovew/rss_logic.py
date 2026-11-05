@@ -348,10 +348,17 @@ def estimate_line_width(text: Any) -> int:
 
 def content_page_width(lines: Any, min_width: int = 480,
                        max_width: int = 1400) -> int:
-    """按最长信息行估算弹窗宽度；常数对应封面、间距与内外边距。"""
+    """按最长信息行估算弹窗宽度。
+
+    宽度 = 最长行 + 封面 64 + 间距 14 + 卡片左右内边距 24
+           + 页面左右内边距 40 + 宿主 VCardText 左右内边距 32
+           + 字体渲染余量 24。
+
+    宿主 vuetify 分支的 VCardText 没有 pa-0，自带 16px 左右内边距，
+    漏算会导致最长行末尾被裁掉一两个中文字。
+    """
     longest = max((estimate_line_width(line) for line in (lines or [])), default=0)
-    # 封面 64 + 间距 14 + 卡片左右内边距 24 + 页面左右内边距 40 + 弹窗余量 16
-    needed = longest + 64 + 14 + 24 + 40 + 16
+    needed = longest + 64 + 14 + 24 + 40 + 32 + 24
     return max(min(int(needed), int(max_width)), int(min_width))
 
 

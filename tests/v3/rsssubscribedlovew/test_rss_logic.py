@@ -230,6 +230,9 @@ def test_content_page_width(logic):
     long = logic.content_page_width(["S01E01", "手动忽略该季，后续不再处理" * 5])
     assert long > short
     assert logic.content_page_width(["x" * 10000]) == 1400
+    # 必须预留封面/间距/内外边距，否则最长行末尾会被裁掉
+    line = "S01E01-E29　2026-11-05 00:10:22　ignored　手动忽略该季，后续不再处理"
+    assert logic.content_page_width([line]) >= logic.estimate_line_width(line) + 198
 
 
 def test_candidate_platform_summary(logic):
