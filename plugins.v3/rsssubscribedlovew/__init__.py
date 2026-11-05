@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.18"
+    plugin_version = "3.1.19"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -627,6 +627,7 @@ class RssSubscribedlovew(_PluginBase):
             'props': {'class': 'pa-3 mb-4', 'variant': 'tonal', 'rounded': 'lg'},
             'content': [
                 self._text_line(
+                    f"v{self.plugin_version}　"
                     f"最近运行 {last.get('time') or '尚未运行'}　"
                     f"入池 {last.get('ingested', 0)}　结算 {last.get('settled', 0)}　"
                     f"窗口 {self._collect_window_hours}h　"
@@ -789,8 +790,12 @@ class RssSubscribedlovew(_PluginBase):
                     'component': 'div',
                     'html': ('<style>'
                              '.v-overlay__content:has(.rss-page-root),'
+                             '.v-overlay__content:has(.v-card .rss-page-root),'
                              '.v-dialog:has(.rss-page-root)'
                              '{max-width:60rem !important;}'
+                             '.v-card:has(.rss-page-root)'
+                             '{max-width:60rem !important;margin-left:auto !important;'
+                             'margin-right:auto !important;}'
                              '</style>'),
                 },
             ]
