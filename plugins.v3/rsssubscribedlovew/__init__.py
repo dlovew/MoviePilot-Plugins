@@ -78,7 +78,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.1.13"
+    plugin_version = "3.1.14"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -666,6 +666,19 @@ class RssSubscribedlovew(_PluginBase):
             })
         blocks.append(self._section('等待中', waiting, '暂无等待中的资源'))
 
+        # 待重试属于「还要处理的事」，放在决策记录之前，避免被长历史压在底部
+        retries = [{
+            'component': 'VChip',
+            'props': {'class': 'ma-1', 'size': 'small', 'variant': 'tonal'},
+            'text': f"{item.get('title') or '-'}（重试 {item.get('attempts', 0)} 次）"
+        } for item in retry[:30]]
+        blocks.append(self._section(
+            '识别失败待重试',
+            [{'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
+              'content': retries}] if retries else [],
+            '无',
+        ))
+
         records = []
         for record in history[:30]:
             records.append({
@@ -688,18 +701,6 @@ class RssSubscribedlovew(_PluginBase):
                 ])
             })
         blocks.append(self._section('决策记录', records, '暂无决策记录'))
-
-        retries = [{
-            'component': 'VChip',
-            'props': {'class': 'ma-1', 'size': 'small', 'variant': 'tonal'},
-            'text': f"{item.get('title') or '-'}（重试 {item.get('attempts', 0)} 次）"
-        } for item in retry[:30]]
-        blocks.append(self._section(
-            '识别失败待重试',
-            [{'component': 'div', 'props': {'class': 'd-flex flex-wrap'},
-              'content': retries}] if retries else [],
-            '无',
-        ))
         return blocks
 
     def get_page(self) -> List[dict]:
