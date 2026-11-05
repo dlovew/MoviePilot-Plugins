@@ -27,7 +27,7 @@ class MediaSyncDeldlovew(_PluginBase):
     # 插件图标
     plugin_icon = "mediasyncdel.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.3"
+    plugin_version = "3.0.4"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -823,56 +823,52 @@ class MediaSyncDeldlovew(_PluginBase):
                 continue
             image = transferhis.image or image
             year = transferhis.year
-            cleanup_ok = True
-            valid_src = bool(transferhis.src) and (
-                Path(transferhis.src).suffix in settings.RMT_MEDIAEXT
-            )
+            history_delete_ready = True
 
-            # 先处理下载器/种子：此时源文件仍在，下载历史与种子状态最完整，
-            # handle_torrent 的「全部删除/局部删除」判定也最准确。
-            if self._del_source and valid_src and transferhis.download_hash:
-                try:
-                    delete_flag, success_flag, handle_torrent_hashs = self.handle_torrent(
-                        type=transferhis.type,
-                        src=transferhis.src,
-                        torrent_hash=transferhis.download_hash)
-                    if not success_flag:
-                        error_cnt += 1
-                        cleanup_ok = False
-                    elif delete_flag:
-                        del_torrent_hashs += handle_torrent_hashs
-                    else:
-                        stop_torrent_hashs += handle_torrent_hashs
-                except Exception as e:
-                    error_cnt += 1
-                    cleanup_ok = False
-                    logger.error("删除种子失败：%s" % str(e))
+            # 删除种子任务
+            if self._del_source:
+                # 1、直接删除源文件
+                if transferhis.src and Path(transferhis.src).suffix in settings.RMT_MEDIAEXT:
+                    # 空目录清理可能与下载器产生竞态（目录已被抢先删除），
+                    # 属于可预期的非致命情况，不能中断后续删种与历史处理
+                    try:
+                        # 删除硬链接文件和源文件
+                        if Path(transferhis.dest).exists():
+                            Path(transferhis.dest).unlink(missing_ok=True)
+                            self.__remove_parent_dir(Path(transferhis.dest))
+                        if Path(transferhis.src).exists():
+                            logger.info(f"源文件 {transferhis.src} 开始删除")
+                            Path(transferhis.src).unlink(missing_ok=True)
+                            logger.info(f"源文件 {transferhis.src} 已删除")
+                            self.__remove_parent_dir(Path(transferhis.src))
+                    except OSError as e:
+                        logger.debug(f"清理空目录跳过（目录可能已被下载器删除）：{e}")
 
-            # 只有外部清理成功才删除媒体文件与源文件。
-            # 旧顺序是先删文件再删种，删种失败时会留下「文件已删、种子与整理历史仍在」
-            # 的不可逆僵局，下次事件也因文件不存在而无法重试。
-            if cleanup_ok and self._del_source and valid_src:
-                # 空目录清理可能与下载器产生竞态（目录已被抢先删除），
-                # 属于可预期的非致命情况，不能中断后续历史处理
-                try:
-                    if Path(transferhis.dest).exists():
-                        Path(transferhis.dest).unlink(missing_ok=True)
-                        self.__remove_parent_dir(Path(transferhis.dest))
-                    if Path(transferhis.src).exists():
-                        logger.info(f"源文件 {transferhis.src} 开始删除")
-                        Path(transferhis.src).unlink(missing_ok=True)
-                        logger.info(f"源文件 {transferhis.src} 已删除")
-                        self.__remove_parent_dir(Path(transferhis.src))
-                except OSError as e:
-                    logger.debug(f"清理空目录跳过（目录可能已被下载器删除）：{e}")
+                    if transferhis.download_hash:
+                        try:
+                            # 2、判断种子是否被删除完
+                            delete_flag, success_flag, handle_torrent_hashs = self.handle_torrent(
+                                type=transferhis.type,
+                                src=transferhis.src,
+                                torrent_hash=transferhis.download_hash)
+                            if not success_flag:
+                                error_cnt += 1
+                                history_delete_ready = False
+                            else:
+                                if delete_flag:
+                                    del_torrent_hashs += handle_torrent_hashs
+                                else:
+                                    stop_torrent_hashs += handle_torrent_hashs
+                        except Exception as e:
+                            error_cnt += 1
+                            history_delete_ready = False
+                            logger.error("删除种子失败：%s" % str(e))
 
             # 整理历史是跨文件系统和下载器清理失败后的重试依据，只能最后删除。
-            if cleanup_ok:
+            if history_delete_ready:
                 self._transferhis.delete(transferhis.id)
             else:
-                logger.warning(
-                    f"外部清理未完成，保留源文件与整理历史以便重试："
-                    f"{transferhis.id} {title} hash={transferhis.download_hash}")
+                logger.warning(f"外部清理未完成，保留整理历史：{transferhis.id}")
 
         logger.info(f"同步删除 {msg} 完成！")
 
@@ -902,10 +898,7 @@ class MediaSyncDeldlovew(_PluginBase):
                 if stop_cnt > 0:
                     torrent_cnt_msg += f"暂停种子{stop_cnt}个\n"
             if error_cnt:
-                torrent_cnt_msg += (
-                    f"删种失败 {error_cnt} 个：对应源文件、种子与整理历史均已保留，"
-                    f"请在下载器中手动处理后重试\n"
-                )
+                torrent_cnt_msg += f"删种失败{error_cnt}个\n"
             # 发送通知
             self.post_message(
                 mtype=MessageType.Plugin,
