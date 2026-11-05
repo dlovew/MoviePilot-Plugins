@@ -3,12 +3,13 @@
     "name": "清理无效做种 -dlovew",
     "description": "清理已经被站点删除的种子及源文件，支持 qBittorrent 和 Transmission。",
     "labels": "下载器,清理,做种,无效种子",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "icon": "clean_a.png",
     "author": "dlovew",
     "level": 1,
     "system_version": ">=3.0.0",
     "history": {
+      "v3.0.2": "新增「停止无效种子」：设置页开关（仅暂停，保留种子与文件）、数据页一键按钮（立即检测 / 停止 / 删除 / 仅标记）与远程命令 /stop_invalid_torrents；数据页显示最近一次执行结果；命令执行后完整恢复各动作开关",
       "v3.0.1": "修复失效种子判定：qBittorrent 会把「种子已删除」报成状态 5，旧逻辑要求状态必须为 4，导致报错的种子只被列出却不标记/删除；改为按错误消息大小写不敏感子串匹配，兼容 (deleted) 等后缀",
       "v3.0.0": "从 V2 2.2 迁移到 V3：导入面改为 app.sdk.*（events/logging/config/plugin/services），NotificationType 换为 MessageType，StringUtils 的 url netloc 与文件大小格式化改为内置实现，get_api/get_page/get_service 返回空列表以符合基类契约"
     }

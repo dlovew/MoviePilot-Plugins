@@ -6,6 +6,7 @@ from pathlib import Path
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from app import schemas
 from app.schemas.types import EventType, MessageType
 from app.schemas import ServiceInfo
 from app.sdk.events import eventmanager, Event
@@ -24,7 +25,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
     # 插件图标
     plugin_icon = "clean_a.png"
     # 插件版本
-    plugin_version = "3.0.1"
+    plugin_version = "3.0.2"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -49,6 +50,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
     _delete_invalid_torrents = False
     _notify_all = False
     _label_only = False
+    _stop_invalid_torrents = False
     _label = ""
     _download_dirs = ""
     _exclude_keywords = ""
@@ -116,6 +118,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
             self._detect_invalid_files = config.get("detect_invalid_files")
             self._notify_all = config.get("notify_all")
             self._label_only = config.get("label_only")
+            self._stop_invalid_torrents = config.get("stop_invalid_torrents")
             self._label = config.get("label")
             self._download_dirs = config.get("download_dirs")
             self._exclude_keywords = config.get("exclude_keywords")
@@ -167,6 +170,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 "detect_invalid_files": self._detect_invalid_files,
                 "notify_all": self._notify_all,
                 "label_only": self._label_only,
+                "stop_invalid_torrents": self._stop_invalid_torrents,
                 "label": self._label,
                 "download_dirs": self._download_dirs,
                 "exclude_keywords": self._exclude_keywords,
@@ -249,6 +253,13 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 "data": {"action": "delete_invalid_torrents"},
             },
             {
+                "cmd": "/stop_invalid_torrents",
+                "event": EventType.PluginAction,
+                "desc": "停止无效做种",
+                "category": "下载器",
+                "data": {"action": "stop_invalid_torrents"},
+            },
+            {
                 "cmd": "/detect_invalid_files",
                 "event": EventType.PluginAction,
                 "desc": "检测无效源文件",
@@ -279,6 +290,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 if not (
                     event_data.get("action") == "detect_invalid_torrents"
                     or event_data.get("action") == "delete_invalid_torrents"
+                    or event_data.get("action") == "stop_invalid_torrents"
                     or event_data.get("action") == "detect_invalid_files"
                     or event_data.get("action") == "delete_invalid_files"
                     or event_data.get("action") == "toggle_notify_all"
@@ -290,6 +302,8 @@ class CleanInvalidSeeddlovew(_PluginBase):
                     userid=event.event_data.get("user"),
                 )
                 old_delete_invalid_torrents = self._delete_invalid_torrents
+                old_label_only = self._label_only
+                old_stop_invalid_torrents = self._stop_invalid_torrents
                 old_detect_invalid_files = self._detect_invalid_files
                 old_delete_invalid_files = self._delete_invalid_files
                 if event_data.get("action") == "detect_invalid_torrents":
@@ -301,6 +315,14 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 elif event_data.get("action") == "delete_invalid_torrents":
                     logger.info("收到远程命令，开始清理无效做种")
                     self._delete_invalid_torrents = True
+                    self._detect_invalid_files = False
+                    self._delete_invalid_files = False
+                    self.clean_invalid_seed()
+                elif event_data.get("action") == "stop_invalid_torrents":
+                    logger.info("收到远程命令，开始停止无效做种")
+                    self._delete_invalid_torrents = False
+                    self._label_only = False
+                    self._stop_invalid_torrents = True
                     self._detect_invalid_files = False
                     self._delete_invalid_files = False
                     self.clean_invalid_seed()
@@ -332,6 +354,8 @@ class CleanInvalidSeeddlovew(_PluginBase):
                     logger.error("收到未知远程命令")
                     return
                 self._delete_invalid_torrents = old_delete_invalid_torrents
+                self._label_only = old_label_only
+                self._stop_invalid_torrents = old_stop_invalid_torrents
                 self._detect_invalid_files = old_detect_invalid_files
                 self._delete_invalid_files = old_delete_invalid_files
                 self.post_message(
@@ -341,7 +365,15 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 )
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return []
+        return [
+            {
+                "path": "/run_clean",
+                "endpoint": self.run_clean,
+                "methods": ["GET"],
+                "auth": "bear",
+                "summary": "立即执行检测/停止/删除/标记无效种子"
+            }
+        ]
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
@@ -962,7 +994,8 @@ class CleanInvalidSeeddlovew(_PluginBase):
                             tracker.get("msg", ""),
                         )
                     )
-                    if self._delete_invalid_torrents or self._label_only:
+                    if (self._delete_invalid_torrents or self._label_only
+                            or self._stop_invalid_torrents):
                         # 检查种子分类和标签是否排除
                         is_excluded = False
                         if torrent_category in exclude_categories:
@@ -982,6 +1015,9 @@ class CleanInvalidSeeddlovew(_PluginBase):
                                 if self._label_only:
                                     # 仅标记
                                     self.set_torrent_label(downloader_obj, downloader_type, torrent_hash, torrent, self._label if self._label != "" else "无效做种")
+                                elif self._stop_invalid_torrents:
+                                    # 停止做种，但保留种子与本地文件
+                                    downloader_obj.stop_torrents(torrent_hash)
                                 else:
                                     # 只删除种子不删除文件，以防其它站点辅种
                                     downloader_obj.delete_torrents(False, torrent_hash)
@@ -1007,12 +1043,18 @@ class CleanInvalidSeeddlovew(_PluginBase):
             else:
                 tracker_not_working_msg = f"✅ 所有 tracker 工作正常\n"
 
-            if self._label_only or self._delete_invalid_torrents:
+            if (self._label_only or self._delete_invalid_torrents
+                    or self._stop_invalid_torrents):
                 if self._label_only:
                     if len(deleted_torrent_tuple_list) > 0:
                         deleted_msg = f"🏷️ 已标记 {len(deleted_torrent_tuple_list)} 个失效种子\n"
                     else:
                         deleted_msg = f"✅ 无需标记任何种子\n"
+                elif self._stop_invalid_torrents:
+                    if len(deleted_torrent_tuple_list) > 0:
+                        deleted_msg = f"⏸️ 已停止 {len(deleted_torrent_tuple_list)} 个失效种子\n"
+                    else:
+                        deleted_msg = f"✅ 无需停止任何种子\n"
                 else:
                     if len(deleted_torrent_tuple_list) > 0:
                         deleted_msg = f"🗑️ 已删除 {len(deleted_torrent_tuple_list)} 个失效种子\n"
@@ -1068,10 +1110,22 @@ class CleanInvalidSeeddlovew(_PluginBase):
                 deleted_msg += f"     📂 分类：{torrent[1]} | 🏷️ 标签：{torrent[2]} | 📏 大小：{self._str_filesize(torrent[3])}\n"
                 deleted_msg += f"     🌐 Tracker：{torrent[4]} - {torrent[5]}\n"
 
+            # 记录本次结果，供数据页展示
+            self.save_data('last_result', {
+                'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'mode': ('标记' if self._label_only
+                         else '停止' if self._stop_invalid_torrents
+                         else '删除' if self._delete_invalid_torrents else '检测'),
+                'invalid': len(invalid_torrent_tuple_list),
+                'handled': len(deleted_torrent_tuple_list),
+                'not_working': len(tracker_not_working_torrents),
+            })
+
             # 日志
             logger.info(invalid_msg)
             logger.info(tracker_not_working_msg)
-            if self._delete_invalid_torrents:
+            if (self._delete_invalid_torrents or self._stop_invalid_torrents
+                    or self._label_only):
                 logger.info(deleted_msg)
                 if len(exclude_categories) != 0:
                     logger.info(exclude_categories_msg)
@@ -1092,11 +1146,17 @@ class CleanInvalidSeeddlovew(_PluginBase):
                         title=f"📊 【清理无效做种 - 详细信息】",
                         text=tracker_not_working_msg,
                     )
-                if self._label_only or self._delete_invalid_torrents:
+                if (self._label_only or self._delete_invalid_torrents
+                        or self._stop_invalid_torrents):
                     deleted_msg = deleted_msg.replace("_", "\\_")
+                    result_title = (
+                        "🏷️ 【清理无效做种 - 标记结果】" if self._label_only
+                        else "⏸️ 【清理无效做种 - 停止结果】" if self._stop_invalid_torrents
+                        else "🗑️ 【清理无效做种 - 删除结果】"
+                    )
                     self.post_message(
                         mtype=MessageType.SiteMessage,
-                        title=f"🗑️ 【清理无效做种 - 删除结果】",
+                        title=result_title,
                         text=deleted_msg,
                     )
                     if self._notify_all:
@@ -1497,6 +1557,20 @@ class CleanInvalidSeeddlovew(_PluginBase):
                                 "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "stop_invalid_torrents",
+                                            "label": "停止无效种子（保留文件）",
+                                            "color": "warning"
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
                                         "component": "VTextField",
                                         "props": {
                                             "model": "label",
@@ -1747,6 +1821,7 @@ class CleanInvalidSeeddlovew(_PluginBase):
             "notify": False,
             "download_dirs": "",
             "delete_invalid_torrents": False,
+            "stop_invalid_torrents": False,
             "delete_invalid_files": False,
             "detect_invalid_files": False,
             "notify_all": False,
@@ -1763,8 +1838,78 @@ class CleanInvalidSeeddlovew(_PluginBase):
             "custom_error_msg": "",
         }
 
+    def run_clean(self, mode: str = "detect"):
+        """立即执行一次：detect 仅检测 / stop 停止 / delete 删除 / label 仅标记。"""
+        mode = str(mode or "detect").strip().lower()
+        old_delete = self._delete_invalid_torrents
+        old_label = self._label_only
+        old_stop = self._stop_invalid_torrents
+        self._delete_invalid_torrents = mode == "delete"
+        self._label_only = mode == "label"
+        self._stop_invalid_torrents = mode == "stop"
+        try:
+            self.clean_invalid_seed()
+        except Exception as error:
+            logger.error(f"手动执行清理失败：{error}")
+            return schemas.Response(success=False, message=str(error))
+        finally:
+            self._delete_invalid_torrents = old_delete
+            self._label_only = old_label
+            self._stop_invalid_torrents = old_stop
+        return schemas.Response(success=True, message="执行完成")
+
     def get_page(self) -> List[dict]:
-        return []
+        """数据页：最近一次执行结果 + 立即操作按钮。"""
+        result = self.get_data('last_result') or {}
+        if not isinstance(result, dict):
+            result = {}
+
+        def action_button(label: str, mode: str, color: str) -> dict:
+            return {
+                'component': 'VBtn',
+                'props': {'color': color, 'variant': 'tonal', 'size': 'small',
+                          'class': 'ma-1'},
+                'text': label,
+                'events': {'click': {
+                    'api': f'plugin/{self.__class__.__name__}/run_clean',
+                    'method': 'get',
+                    'params': {'mode': mode},
+                }},
+            }
+
+        summary = (
+            f"最近执行 {result.get('time') or '尚未执行'}　"
+            f"模式 {result.get('mode') or '-'}　"
+            f"失效 {result.get('invalid', 0)}　"
+            f"已处理 {result.get('handled', 0)}　"
+            f"tracker 异常 {result.get('not_working', 0)}"
+        )
+        return [{
+            'component': 'div',
+            'props': {'style': 'width:100%;max-width:960px;margin:0 auto'},
+            'content': [{
+                'component': 'VCard',
+                'props': {'class': 'pa-2', 'variant': 'tonal'},
+                'content': [
+                    {'component': 'VCardTitle',
+                     'props': {'class': 'text-subtitle-2 text-medium-emphasis'},
+                     'text': '清理无效做种'},
+                    {'component': 'div',
+                     'props': {'class': 'text-caption text-medium-emphasis'},
+                     'text': summary},
+                    {'component': 'VCardActions', 'content': [
+                        action_button('立即检测', 'detect', 'primary'),
+                        action_button('停止无效种子', 'stop', 'warning'),
+                        action_button('删除无效种子', 'delete', 'error'),
+                        action_button('仅标记', 'label', 'grey'),
+                    ]},
+                    {'component': 'div',
+                     'props': {'class': 'text-caption text-medium-emphasis mt-1'},
+                     'text': ('「停止」会暂停种子但保留种子与文件；'
+                              '「检测」只统计不处理；结果同时写入插件日志与通知。')},
+                ],
+            }],
+        }]
 
     def stop_service(self):
         """
