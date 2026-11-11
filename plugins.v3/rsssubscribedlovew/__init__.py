@@ -32,6 +32,7 @@ try:
         build_tier_rules,
         build_filter_css,
         build_filter_html,
+        candidate_briefs,
         candidate_platform_items,
         choose_best,
         content_page_width,
@@ -57,6 +58,7 @@ except ImportError:  # 兼容按顶层模块加载的宿主
         build_tier_rules,
         build_filter_css,
         build_filter_html,
+        candidate_briefs,
         candidate_platform_items,
         choose_best,
         content_page_width,
@@ -84,7 +86,7 @@ class RssSubscribedlovew(_PluginBase):
     plugin_name = "自定义订阅番剧魔改版 -dlovew"
     plugin_desc = "多 RSS 源收集资源，按窗口比较各平台等效单集体积后择优创建订阅，后续由 MoviePilot 追集。"
     plugin_icon = "rss.png"
-    plugin_version = "3.2.6"
+    plugin_version = "3.2.7"
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"
     plugin_config_prefix = "rssubscribedlovew_"
@@ -498,6 +500,35 @@ class RssSubscribedlovew(_PluginBase):
                 'text': text}
 
     @staticmethod
+    def _candidate_brief_chips(briefs: Any) -> List[dict]:
+        """决策记录展示全部候选：选中项高亮，被排除项一并列出。"""
+        if not isinstance(briefs, list) or not briefs:
+            return []
+        chips = []
+        for item in briefs[:8]:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label') or '-')
+            size_text = str(item.get('size_text') or '体积未知')
+            selected = bool(item.get('selected'))
+            unknown = bool(item.get('unknown'))
+            chips.append({
+                'component': 'VChip',
+                'props': {
+                    'size': 'small',
+                    'class': 'mr-1 mt-1',
+                    'color': 'primary' if selected else ('warning' if unknown else 'grey'),
+                    'variant': 'tonal' if selected else 'flat',
+                },
+                'text': ('✓ ' if selected else '· ') + f"{label} · {size_text}",
+            })
+        if not chips:
+            return []
+        return [{'component': 'div',
+                 'props': {'class': 'd-flex flex-wrap mt-1'},
+                 'content': chips}]
+
+    @staticmethod
     def _with_poster(poster: Any, content: List[dict]) -> List[dict]:
         """左侧封面 + 右侧内容；没有海报时保持原来的纯文本布局。"""
         if not poster:
@@ -753,6 +784,7 @@ class RssSubscribedlovew(_PluginBase):
                             str(record.get('platform') or ''),
                             str(record.get('reason') or record.get('error') or ''),
                         ]))),
+                        *self._candidate_brief_chips(record.get('candidate_briefs')),
                     ])
                 }],
             })
@@ -1362,6 +1394,7 @@ class RssSubscribedlovew(_PluginBase):
             'poster': item.get('poster'),
             'tmdbid': str(item.get('tmdbid') or ''),
             'resource_season_text': str(item.get('resource_season_text') or ''),
+            'candidate_briefs': candidate_briefs(item.get('candidates') or [], platform),
             'time': now_text(),
         })
 

@@ -497,3 +497,27 @@ def reidentify_platforms(candidates: Any,
         candidate['platform_hits'] = [hit['token'] for hit in hits]
         refreshed += 1
     return refreshed
+
+
+def candidate_briefs(candidates: Any, chosen: Any = None,
+                     limit: int = 8) -> List[Dict[str, Any]]:
+    """把候选压成决策记录用的紧凑清单，标出选中项。
+
+    按「平台-制作组」归并（复用数据页等待中的展示口径），选中项用 ``chosen``
+    前缀匹配；未选中的保留下来，便于回看当时排除了哪些平台与等效体积。
+    """
+    items = candidate_platform_items(candidates, limit=limit)
+    chosen_text = str(chosen or '').strip()
+    briefs: List[Dict[str, Any]] = []
+    for item in items:
+        label = str(item.get('label') or '')
+        selected = bool(chosen_text) and (
+            label == chosen_text or label.startswith(chosen_text + '-')
+        )
+        briefs.append({
+            'label': label,
+            'size_text': str(item.get('size_text') or '体积未知'),
+            'selected': selected,
+            'unknown': bool(item.get('unknown')),
+        })
+    return briefs

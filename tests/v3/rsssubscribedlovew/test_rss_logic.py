@@ -255,6 +255,28 @@ def test_build_filter_html_and_css(logic):
     assert 'label.rss-expand-off{display:inline-flex !important;' in css
 
 
+def test_candidate_briefs_marks_chosen(logic):
+    gib = 1024 ** 3
+    candidates = [
+        {"platform_token": "HamiVideo", "team": "UBWEB",
+         "normalized_size": 1.23 * gib, "title": "a"},
+        {"platform_token": "CR", "team": "UBWEB",
+         "normalized_size": 1.5 * gib, "title": "b"},
+        {"platform": "UNKNOWN", "team": "UBWEB",
+         "normalized_size": 2 * gib, "title": "c"},
+    ]
+    briefs = logic.candidate_briefs(candidates, "HamiVideo")
+    assert [item["label"] for item in briefs] == [
+        "HamiVideo-UBWEB", "CR-UBWEB", "UNKNOWN-UBWEB"
+    ]
+    assert [item["selected"] for item in briefs] == [True, False, False]
+    assert briefs[0]["size_text"] == "1.23 GiB/集"
+    assert briefs[2]["unknown"] is True
+    assert all(not item["selected"]
+               for item in logic.candidate_briefs(candidates, ""))
+    assert logic.candidate_briefs([]) == []
+
+
 def test_candidate_platform_summary(logic):
     candidates = [
         {"platform_token": "LINETV", "team": "UBWEB"},
