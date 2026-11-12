@@ -81,6 +81,22 @@ def test_is_episode_tag(logic):
         assert logic.is_episode_tag(tag, prefixes) is False
 
 
+def test_episodes_from_file_names(logic):
+    names = [
+        "/downloads/Show.S01.Complete/Show.S01E01.1080p.mkv",
+        "/downloads/Show.S01.Complete/Show.S01E02.1080p.mkv",
+        "/downloads/Show.S01.Complete/Show.S01E03.1080p.mkv",
+        "/downloads/Show.S01.Complete/Show.S01E03.ass",
+        "/downloads/Show.S01.Complete/poster.jpg",
+    ]
+    numbers = logic.episodes_from_file_names(names)
+    assert numbers == [1, 2, 3]
+    assert logic.build_episode_tags(numbers) == ["E01-03"]
+    assert logic.episodes_from_file_names(["/x/01.mkv", "/x/02.mkv"]) == [1, 2]
+    assert logic.episodes_from_file_names(["/x/[05].mkv"]) == [5]
+    assert logic.episodes_from_file_names([]) == []
+
+
 def test_episode_format(logic):
     assert logic.episode_format(True, "EP", "3", "~") == {
         "enabled": True, "prefix": "EP", "threshold": 3, "separator": "~"

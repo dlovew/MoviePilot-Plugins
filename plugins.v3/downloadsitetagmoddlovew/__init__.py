@@ -26,6 +26,7 @@ try:
     from .episode_tags import (
         build_episode_tags,
         episode_format,
+        episodes_from_file_names,
         is_episode_tag,
         known_episode_prefixes,
         normalize_episodes,
@@ -35,6 +36,7 @@ except ImportError:  # 兼容按顶层模块加载的宿主
     from episode_tags import (  # type: ignore
         build_episode_tags,
         episode_format,
+        episodes_from_file_names,
         is_episode_tag,
         known_episode_prefixes,
         normalize_episodes,
@@ -50,7 +52,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "2.0.8"
+    plugin_version = "2.0.9"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -501,6 +503,55 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 pass
         return ''
 
+    def __episode_numbers_from_files(self, _hash: str, service: ServiceInfo,
+                                     torrent: Any = None) -> List[int]:
+        """标题没有集数时，从下载历史/下载器文件列表汇总各集集数。
+
+        合集种子常命名为 S01.Complete，标题里没有集数，但内部文件名带
+        E01/E02；优先查本地下载历史（最快），查不到再问下载器。
+        """
+        names: List[str] = []
+        try:
+            records = self.downloadhistory_oper.get_files_by_hash(
+                download_hash=_hash) or []
+            for record in records:
+                path = (getattr(record, 'fullpath', None)
+                        or getattr(record, 'filepath', None))
+                if path:
+                    names.append(str(path))
+        except Exception as err:
+            logger.debug(f"{self.LOG_TAG}读取下载历史文件记录失败 {_hash}: {err}")
+        if names:
+            numbers = episodes_from_file_names(names)
+            if numbers:
+                return numbers
+        # 历史记录解析不出集数时，改用下载器的文件列表
+        names = []
+
+        downloader_obj = service.instance
+        if getattr(service, "type", "") == "qbittorrent" and downloader_obj is not None:
+            try:
+                qbc = getattr(downloader_obj, "qbc", None)
+                files = qbc.torrents_files(torrent_hash=_hash) if qbc else []
+                for item in files or []:
+                    value = (item.get('name') if callable(getattr(item, 'get', None))
+                             else getattr(item, 'name', None))
+                    if value:
+                        names.append(str(value))
+            except Exception as err:
+                logger.debug(f"{self.LOG_TAG}读取 qB 种子文件列表失败 {_hash}: {err}")
+        else:
+            try:
+                files = torrent.files() if torrent is not None else []
+                for item in files or []:
+                    value = (item.get('name') if callable(getattr(item, 'get', None))
+                             else getattr(item, 'name', None))
+                    if value:
+                        names.append(str(value))
+            except Exception as err:
+                logger.debug(f"{self.LOG_TAG}读取 TR 种子文件列表失败 {_hash}: {err}")
+        return episodes_from_file_names(names)
+
     def _refresh_episode_tags(self, extra_prefixes: Any = None) -> Dict[str, Any]:
         """遍历全部种子重算集数标签：清理旧格式，按当前配置重新打。"""
         if not self._enable_episode_tag:
@@ -520,6 +571,8 @@ class DownloadSiteTagModdlovew(_PluginBase):
         scanned = 0
         no_title = 0
         no_episode = 0
+        from_files = 0
+        file_lookup = 0
         unparsed_samples: List[str] = []
         for service in services.values():
             downloader_obj = service.instance
@@ -545,9 +598,26 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         no_title += 1
                     wanted = self.__episode_tags_for(title)
                     if not wanted:
-                        no_episode += 1
-                        if title and len(unparsed_samples) < 3:
-                            unparsed_samples.append(title[:120])
+                        # 合集种子标题只有 S01.Complete，集数在内部文件名里
+                        file_lookup += 1
+                        numbers = self.__episode_numbers_from_files(
+                            _hash, service, torrent)
+                        if numbers:
+                            from_files += 1
+                            wanted = build_episode_tags(
+                                numbers,
+                                prefix=self._episode_tag_prefix,
+                                threshold=self._episode_merge_threshold,
+                                separator=self._episode_merge_separator)
+                        else:
+                            no_episode += 1
+                            if title and len(unparsed_samples) < 3:
+                                unparsed_samples.append(title[:120])
+                        if file_lookup % 200 == 0:
+                            logger.info(
+                                f"{self.LOG_TAG}集数标签补全进度：已查询 "
+                                f"{file_lookup} 个种子的文件列表，"
+                                f"其中 {from_files} 个解析出集数")
                     stale = [tag for tag in existing
                              if is_episode_tag(tag, prefixes) and tag not in wanted]
                     missing = [tag for tag in wanted if tag not in existing]
@@ -582,7 +652,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                     logger.error(f"{self.LOG_TAG}刷新集数标签异常：{str(err)}")
         if unparsed_samples:
             logger.warning(
-                f"{self.LOG_TAG}以下种子标题未能解析出集数："
+                f"{self.LOG_TAG}以下种子在标题和文件列表中均未能解析出集数："
                 + ' | '.join(unparsed_samples))
         return {
             'updated': updated,
@@ -590,6 +660,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
             'scanned': scanned,
             'no_title': no_title,
             'no_episode': no_episode,
+            'from_files': from_files,
         }
 
     @property

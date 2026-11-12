@@ -6,8 +6,14 @@
   默认阈值 2，即大于 1 集的连续段都合并；阈值 <= 1 表示完全不合并。
 - 合并分隔符可为空（``E0103``）。
 """
+import os
 import re
 from typing import Any, Dict, List, Sequence
+
+MEDIA_FILE_EXTS = {
+    '.mkv', '.mp4', '.avi', '.ts', '.m2ts', '.mov', '.wmv', '.flv',
+    '.rmvb', '.rm', '.iso', '.mpg', '.mpeg', '.m4v', '.webm', '.hevc',
+}
 
 # 标题里常见的集数写法，作为 MetaInfo.episode_list 解析失败时的兜底
 _TITLE_PATTERNS = (
@@ -58,6 +64,33 @@ def parse_episodes_from_title(title: Any) -> List[int]:
             else:
                 numbers.append(start)
     return normalize_episodes(numbers)
+
+
+def episodes_from_file_names(names: Any) -> List[int]:
+    """合集种子标题没有集数时，从种子内各集文件名汇总集数。
+
+    支持 ``E01`` / ``[01]`` / ``第01集``，以及纯数字文件名 ``01.mkv``；
+    视频文件优先，字幕等附带文件也参与汇总（同一集会被去重）。
+    """
+    primary: List[int] = []
+    secondary: List[int] = []
+    for raw in names or []:
+        text = str(raw or '').strip()
+        if not text:
+            continue
+        base = text.replace('\\', '/').rsplit('/', 1)[-1]
+        numbers = parse_episodes_from_title(base)
+        if not numbers:
+            match = re.match(r'^(\d{1,3})\.[a-z0-9]+$', base.lower())
+            if match:
+                numbers = [int(match.group(1))]
+        if not numbers:
+            continue
+        if os.path.splitext(base)[1].lower() in MEDIA_FILE_EXTS:
+            primary.extend(numbers)
+        else:
+            secondary.extend(numbers)
+    return normalize_episodes(primary + secondary)
 
 
 def split_runs(episodes: Sequence[int]) -> List[List[int]]:
