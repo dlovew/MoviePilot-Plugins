@@ -5,6 +5,8 @@ on:
       - main
     paths:
       - 'package.v3.json'
+      - '.github/workflows/release.yml'
+      - '.github/scripts/backfill_releases.sh'
   workflow_dispatch:
     inputs:
       backfill:
@@ -116,8 +118,10 @@ jobs:
           done
 
       - name: Backfill historical releases
-        if: github.event_name == 'workflow_dispatch' && inputs.backfill
+        # push 时自动增量补发：脚本幂等，已存在的 Release 会跳过；
+        # 手动触发时可通过 max_per_plugin 扩大补发范围。
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.backfill)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAX_PER_PLUGIN: ${{ inputs.max_per_plugin }}
+          MAX_PER_PLUGIN: ${{ inputs.max_per_plugin || '10' }}
         run: bash .github/scripts/backfill_releases.sh

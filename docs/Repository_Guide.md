@@ -92,7 +92,7 @@ Release 工作流只处理 `package.v3.json` 中 `release: true` 的条目，从
 
 宿主的「版本历史」弹窗把索引 `history` 与 GitHub Release 列表合并显示：只有存在对应 Release 的版本才会出现「安装」按钮，「当前」标记由后端对比本地 `plugin_version` 与 Release 版本得出。因此新增版本后必须让 Release 工作流成功发布，否则该版本只有说明文字、没有安装按钮。
 
-历史版本补发：在 GitHub Actions 手动运行 `Plugin Release`，勾选 `backfill`（可设 `max_per_plugin`，默认每插件 10 个）。脚本 `.github/scripts/backfill_releases.sh` 会遍历 `history`，从「索引中该插件版本等于目标版本」的 git 提交取代码快照打包；找不到 V3 快照的记录（如沿用 V2 说明）自动跳过，已存在的 Release 不会重建。该步骤默认不自动执行，避免一次性创建大量 Release。
+历史版本补发：`push` 到 `main`（`package.v3.json` / 本工作流 / 补发脚本变更）时自动执行增量补发，后续版本更新无需手动触发。脚本 `.github/scripts/backfill_releases.sh` 遍历 `history`，从「索引中该插件版本等于目标版本」的 git 提交取代码快照打包；找不到 V3 快照的记录（如沿用 V2 说明）自动跳过，已存在的 Release 不会重建，因此每次只补新增版本。也可在 GitHub Actions 手动运行 `Plugin Release`，勾选 `backfill` 并调大 `max_per_plugin`（默认每插件 10 个）一次性补更多历史版本。
 
 ## 7. 测试
 
