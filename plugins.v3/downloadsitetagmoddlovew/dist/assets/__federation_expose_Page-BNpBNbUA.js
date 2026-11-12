@@ -5,11 +5,12 @@ const {createTextVNode:_createTextVNode,resolveComponent:_resolveComponent,withC
 
 const _hoisted_1 = { class: "plugin-page" };
 const _hoisted_2 = { class: "d-flex flex-wrap mb-4" };
-const _hoisted_3 = { class: "text-body-2" };
+const _hoisted_3 = { class: "text-caption text-medium-emphasis mb-3" };
 const _hoisted_4 = { class: "text-body-2" };
 const _hoisted_5 = { class: "text-body-2" };
-const _hoisted_6 = {
-  key: 3,
+const _hoisted_6 = { class: "text-body-2" };
+const _hoisted_7 = {
+  key: 4,
   class: "text-body-2"
 };
 
@@ -40,9 +41,18 @@ const props = __props;
 const emit = __emit;
 
 const loading = ref(false);
+const refreshing = ref(false);
 const error = ref('');
+const actionMessage = ref('');
 const status = ref(null);
 const pluginId = computed(() => props.pluginId || props.sourcePluginId || '');
+
+const episodeTagText = computed(() => {
+  const value = status.value?.episode_tag;
+  if (!value) return '-'
+  const separator = value.separator === '' ? '（空）' : String(value.separator);
+  return `${value.prefix} / 阈值 ${value.threshold} / 分隔符 ${separator}`
+});
 
 const scheduleText = computed(() => {
   const value = status.value;
@@ -67,6 +77,24 @@ async function loadStatus() {
     error.value = err?.message || '读取插件状态失败';
   } finally {
     loading.value = false;
+  }
+}
+
+async function refreshEpisodeTags() {
+  if (!pluginId.value) {
+    error.value = '未获取到插件实例 ID，无法补全集数标签';
+    return
+  }
+  refreshing.value = true;
+  actionMessage.value = '';
+  error.value = '';
+  try {
+    const response = await props.api.get(`plugin/${pluginId.value}/refresh_episode_tags`);
+    actionMessage.value = response?.message || '已开始补全集数标签，请查看插件日志';
+  } catch (err) {
+    error.value = err?.message || '补全集数标签失败';
+  } finally {
+    refreshing.value = false;
   }
 }
 
@@ -151,16 +179,29 @@ return (_ctx, _cache) => {
                   _: 1
                 }))
               : _createCommentVNode("", true),
+            (actionMessage.value)
+              ? (_openBlock(), _createBlock(_component_v_alert, {
+                  key: 1,
+                  type: "success",
+                  variant: "tonal",
+                  class: "mb-4"
+                }, {
+                  default: _withCtx(() => [
+                    _createTextVNode(_toDisplayString(actionMessage.value), 1)
+                  ]),
+                  _: 1
+                }))
+              : _createCommentVNode("", true),
             (loading.value)
               ? (_openBlock(), _createBlock(_component_v_progress_linear, {
-                  key: 1,
+                  key: 2,
                   indeterminate: "",
                   color: "primary",
                   class: "mb-4"
                 }))
               : _createCommentVNode("", true),
             (status.value)
-              ? (_openBlock(), _createElementBlock(_Fragment, { key: 2 }, [
+              ? (_openBlock(), _createElementBlock(_Fragment, { key: 3 }, [
                   _createVNode(_component_v_row, { dense: "" }, {
                     default: _withCtx(() => [
                       _createVNode(_component_v_col, {
@@ -236,6 +277,7 @@ return (_ctx, _cache) => {
                       }, 1032, ["color", "variant"]))
                     }), 128))
                   ]),
+                  _createElementVNode("div", _hoisted_3, " 集数标签格式：" + _toDisplayString(episodeTagText.value), 1),
                   _createVNode(_component_v_divider, { class: "my-3" }),
                   _createVNode(_component_v_row, { dense: "" }, {
                     default: _withCtx(() => [
@@ -245,7 +287,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _cache[6] || (_cache[6] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "已选下载器", -1)),
-                          _createElementVNode("div", _hoisted_3, _toDisplayString((status.value.selected_downloaders || []).join('、') || '未选择'), 1)
+                          _createElementVNode("div", _hoisted_4, _toDisplayString((status.value.selected_downloaders || []).join('、') || '未选择'), 1)
                         ]),
                         _: 1
                       }),
@@ -255,7 +297,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _cache[7] || (_cache[7] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "可用下载器", -1)),
-                          _createElementVNode("div", _hoisted_4, _toDisplayString((status.value.downloaders || []).join('、') || '无'), 1)
+                          _createElementVNode("div", _hoisted_5, _toDisplayString((status.value.downloaders || []).join('、') || '无'), 1)
                         ]),
                         _: 1
                       }),
@@ -265,7 +307,7 @@ return (_ctx, _cache) => {
                       }, {
                         default: _withCtx(() => [
                           _cache[8] || (_cache[8] = _createElementVNode("div", { class: "text-caption text-medium-emphasis" }, "二级分类", -1)),
-                          _createElementVNode("div", _hoisted_5, _toDisplayString(status.value.category_count) + " 项 · " + _toDisplayString(status.value.rename_type), 1)
+                          _createElementVNode("div", _hoisted_6, _toDisplayString(status.value.category_count) + " 项 · " + _toDisplayString(status.value.rename_type), 1)
                         ]),
                         _: 1
                       })
@@ -285,20 +327,32 @@ return (_ctx, _cache) => {
                   })
                 ], 64))
               : (!loading.value && !error.value)
-                ? (_openBlock(), _createElementBlock("div", _hoisted_6, "暂无运行状态数据。"))
+                ? (_openBlock(), _createElementBlock("div", _hoisted_7, "暂无运行状态数据。"))
                 : _createCommentVNode("", true)
           ]),
           _: 1
         }),
         _createVNode(_component_v_card_actions, null, {
           default: _withCtx(() => [
+            _createVNode(_component_v_btn, {
+              color: "primary",
+              variant: "tonal",
+              "prepend-icon": "mdi-tag-multiple",
+              loading: refreshing.value,
+              onClick: refreshEpisodeTags
+            }, {
+              default: _withCtx(() => [...(_cache[11] || (_cache[11] = [
+                _createTextVNode(" 补全集数标签 ", -1)
+              ]))]),
+              _: 1
+            }, 8, ["loading"]),
             _createVNode(_component_v_spacer),
             _createVNode(_component_v_btn, {
               variant: "text",
               "prepend-icon": "mdi-refresh",
               onClick: loadStatus
             }, {
-              default: _withCtx(() => [...(_cache[11] || (_cache[11] = [
+              default: _withCtx(() => [...(_cache[12] || (_cache[12] = [
                 _createTextVNode("刷新", -1)
               ]))]),
               _: 1

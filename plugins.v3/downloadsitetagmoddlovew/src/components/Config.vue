@@ -40,7 +40,15 @@ const defaultConfig = {
   catprefix: '',
   siteprefix: '',
   tracker_mappings_str: '',
+  enable_episode_tag: true,
+  episode_tag_prefix: 'E',
+  episode_merge_threshold: 2,
+  episode_merge_separator: '-',
 }
+
+const prefixRules = [
+  value => !!String(value ?? '').trim() || '标签前缀必填',
+]
 
 const config = reactive({ ...defaultConfig, ...(props.initialConfig || {}) })
 const form = ref(null)
@@ -134,6 +142,54 @@ async function resetCategories() {
             </v-col>
             <v-col>
               <v-switch v-model="config.rename_type" label="自定义" color="primary" persistent-hint inset />
+            </v-col>
+          </v-row>
+
+          <div class="text-subtitle-1 font-weight-bold mt-4 mb-2">集数标签</div>
+          <v-row>
+            <v-col cols="12" md="3">
+              <v-switch
+                v-model="config.enable_episode_tag"
+                label="下载时自动打集数标签"
+                color="primary"
+                inset
+              />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field
+                v-model="config.episode_tag_prefix"
+                label="标签前缀（必填）"
+                :rules="prefixRules"
+                placeholder="E"
+                hint="例如 E -> E01"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field
+                v-model.number="config.episode_merge_threshold"
+                label="合并阈值"
+                type="number"
+                min="0"
+                hint="连续集数超过阈值才合并；<= 1 不合并"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field
+                v-model="config.episode_merge_separator"
+                label="合并分隔符（可空）"
+                placeholder="-"
+                hint="默认 -，如 E01-03；留空为 E0103"
+                persistent-hint
+              />
+            </v-col>
+            <v-col cols="12">
+              <v-alert type="info" variant="tonal" density="compact">
+                默认前缀 E、阈值 2、分隔符 -：如 E01、E02；连续 3 集及以上合并为 E01-03。
+                修改任意格式配置并保存后，会自动全量刷新存量标签并迁移旧格式标签；
+                也可在数据页点「补全集数标签」手动执行。
+              </v-alert>
             </v-col>
           </v-row>
 
