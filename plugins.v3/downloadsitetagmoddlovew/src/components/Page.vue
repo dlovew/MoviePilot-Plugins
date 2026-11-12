@@ -18,18 +18,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'switch', 'action', 'layout'])
 
 const loading = ref(false)
-const refreshing = ref(false)
 const error = ref('')
-const actionMessage = ref('')
 const status = ref(null)
 const pluginId = computed(() => props.pluginId || props.sourcePluginId || '')
-
-const episodeTagText = computed(() => {
-  const value = status.value?.episode_tag
-  if (!value) return '-'
-  const separator = value.separator === '' ? '（空）' : String(value.separator)
-  return `${value.prefix} / 阈值 ${value.threshold} / 分隔符 ${separator}`
-})
 
 const scheduleText = computed(() => {
   const value = status.value
@@ -57,24 +48,6 @@ async function loadStatus() {
   }
 }
 
-async function refreshEpisodeTags() {
-  if (!pluginId.value) {
-    error.value = '未获取到插件实例 ID，无法补全集数标签'
-    return
-  }
-  refreshing.value = true
-  actionMessage.value = ''
-  error.value = ''
-  try {
-    const response = await props.api.get(`plugin/${pluginId.value}/refresh_episode_tags`)
-    actionMessage.value = response?.message || '已开始补全集数标签，请查看插件日志'
-  } catch (err) {
-    error.value = err?.message || '补全集数标签失败'
-  } finally {
-    refreshing.value = false
-  }
-}
-
 onMounted(() => {
   emit('layout', { maxWidth: '52rem' })
   void loadStatus()
@@ -98,7 +71,6 @@ onMounted(() => {
 
       <v-card-text>
         <v-alert v-if="error" type="warning" class="mb-4">{{ error }}</v-alert>
-        <v-alert v-if="actionMessage" type="success" variant="tonal" class="mb-4">{{ actionMessage }}</v-alert>
         <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
 
         <template v-if="status">
@@ -135,10 +107,6 @@ onMounted(() => {
             </v-chip>
           </div>
 
-          <div class="text-caption text-medium-emphasis mb-3">
-            集数标签格式：{{ episodeTagText }}
-          </div>
-
           <v-divider class="my-3" />
           <v-row dense>
             <v-col cols="12" sm="4">
@@ -163,15 +131,6 @@ onMounted(() => {
       </v-card-text>
 
       <v-card-actions>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          prepend-icon="mdi-tag-multiple"
-          :loading="refreshing"
-          @click="refreshEpisodeTags"
-        >
-          补全集数标签
-        </v-btn>
         <v-spacer />
         <v-btn variant="text" prepend-icon="mdi-refresh" @click="loadStatus">刷新</v-btn>
       </v-card-actions>

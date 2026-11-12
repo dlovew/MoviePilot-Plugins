@@ -54,15 +54,7 @@ const defaultConfig = {
   catprefix: '',
   siteprefix: '',
   tracker_mappings_str: '',
-  enable_episode_tag: true,
-  episode_tag_prefix: 'E',
-  episode_merge_threshold: 2,
-  episode_merge_separator: '-',
 };
-
-const prefixRules = [
-  value => !!String(value ?? '').trim() || '标签前缀必填',
-];
 
 const config = reactive({ ...defaultConfig, ...(props.initialConfig || {}) });
 const form = ref(null);
@@ -128,9 +120,9 @@ return (_ctx, _cache) => {
   const _component_v_col = _resolveComponent("v-col");
   const _component_v_checkbox = _resolveComponent("v-checkbox");
   const _component_v_row = _resolveComponent("v-row");
-  const _component_v_text_field = _resolveComponent("v-text-field");
   const _component_v_divider = _resolveComponent("v-divider");
   const _component_v_select = _resolveComponent("v-select");
+  const _component_v_text_field = _resolveComponent("v-text-field");
   const _component_VCronField = _resolveComponent("VCronField");
   const _component_v_textarea = _resolveComponent("v-textarea");
   const _component_v_form = _resolveComponent("v-form");
@@ -152,7 +144,7 @@ return (_ctx, _cache) => {
             }, {
               default: _withCtx(() => [
                 _createVNode(_component_v_icon, null, {
-                  default: _withCtx(() => [...(_cache[21] || (_cache[21] = [
+                  default: _withCtx(() => [...(_cache[17] || (_cache[17] = [
                     _createTextVNode("mdi-close", -1)
                   ]))]),
                   _: 1
@@ -189,11 +181,11 @@ return (_ctx, _cache) => {
               ref_key: "form",
               ref: form,
               modelValue: isFormValid.value,
-              "onUpdate:modelValue": _cache[20] || (_cache[20] = $event => ((isFormValid).value = $event)),
+              "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((isFormValid).value = $event)),
               onSubmit: _withModifiers(saveConfig, ["prevent"])
             }, {
               default: _withCtx(() => [
-                _cache[24] || (_cache[24] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-bold mt-4 mb-2" }, "基本设置", -1)),
+                _cache[19] || (_cache[19] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-bold mt-4 mb-2" }, "基本设置", -1)),
                 _createVNode(_component_v_row, null, {
                   default: _withCtx(() => [
                     _createVNode(_component_v_col, {
@@ -299,93 +291,6 @@ return (_ctx, _cache) => {
                   ]),
                   _: 1
                 }),
-                _cache[25] || (_cache[25] = _createElementVNode("div", { class: "text-subtitle-1 font-weight-bold mt-4 mb-2" }, "集数标签", -1)),
-                _createVNode(_component_v_row, null, {
-                  default: _withCtx(() => [
-                    _createVNode(_component_v_col, {
-                      cols: "12",
-                      md: "3"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_v_switch, {
-                          modelValue: config.enable_episode_tag,
-                          "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((config.enable_episode_tag) = $event)),
-                          label: "下载时自动打集数标签",
-                          color: "primary",
-                          inset: ""
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    }),
-                    _createVNode(_component_v_col, {
-                      cols: "12",
-                      md: "3"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_v_text_field, {
-                          modelValue: config.episode_tag_prefix,
-                          "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((config.episode_tag_prefix) = $event)),
-                          label: "标签前缀（必填）",
-                          rules: prefixRules,
-                          placeholder: "E",
-                          hint: "例如 E -> E01",
-                          "persistent-hint": ""
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    }),
-                    _createVNode(_component_v_col, {
-                      cols: "12",
-                      md: "3"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_v_text_field, {
-                          modelValue: config.episode_merge_threshold,
-                          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((config.episode_merge_threshold) = $event)),
-                          modelModifiers: { number: true },
-                          label: "合并阈值",
-                          type: "number",
-                          min: "0",
-                          hint: "连续集数达到阈值即合并；默认 2 = 大于 1 集就合并；<= 1 不合并",
-                          "persistent-hint": ""
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    }),
-                    _createVNode(_component_v_col, {
-                      cols: "12",
-                      md: "3"
-                    }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_v_text_field, {
-                          modelValue: config.episode_merge_separator,
-                          "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((config.episode_merge_separator) = $event)),
-                          label: "合并分隔符（可空）",
-                          placeholder: "-",
-                          hint: "默认 -，如 E01-03；留空为 E0103",
-                          "persistent-hint": ""
-                        }, null, 8, ["modelValue"])
-                      ]),
-                      _: 1
-                    }),
-                    _createVNode(_component_v_col, { cols: "12" }, {
-                      default: _withCtx(() => [
-                        _createVNode(_component_v_alert, {
-                          type: "info",
-                          variant: "tonal",
-                          density: "compact"
-                        }, {
-                          default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
-                            _createTextVNode(" 默认前缀 E、阈值 2、分隔符 -：单集为 E01；连续 2 集合并为 E01-02，3 集为 E01-03。 修改任意格式配置并保存后，会自动全量刷新存量标签并迁移旧格式标签； 也可在数据页点「补全集数标签」手动执行。 ", -1)
-                          ]))]),
-                          _: 1
-                        })
-                      ]),
-                      _: 1
-                    })
-                  ]),
-                  _: 1
-                }),
                 _createVNode(_component_v_divider),
                 _createVNode(_component_v_row, null, {
                   default: _withCtx(() => [
@@ -393,7 +298,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_v_select, {
                           modelValue: config.downloaders,
-                          "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((config.downloaders) = $event)),
+                          "onUpdate:modelValue": _cache[7] || (_cache[7] = $event => ((config.downloaders) = $event)),
                           items: config.all_downloaders,
                           label: "下载器",
                           placeholder: "请选择下载器",
@@ -412,7 +317,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_v_text_field, {
                           modelValue: config.catprefix,
-                          "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config.catprefix) = $event)),
+                          "onUpdate:modelValue": _cache[8] || (_cache[8] = $event => ((config.catprefix) = $event)),
                           label: "自定义分类前缀",
                           placeholder: "默认为空"
                         }, null, 8, ["modelValue"])
@@ -426,7 +331,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_v_text_field, {
                           modelValue: config.siteprefix,
-                          "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((config.siteprefix) = $event)),
+                          "onUpdate:modelValue": _cache[9] || (_cache[9] = $event => ((config.siteprefix) = $event)),
                           label: "自定义站点标签前缀",
                           placeholder: "默认为空"
                         }, null, 8, ["modelValue"])
@@ -440,7 +345,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_v_select, {
                           modelValue: config.interval,
-                          "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((config.interval) = $event)),
+                          "onUpdate:modelValue": _cache[10] || (_cache[10] = $event => ((config.interval) = $event)),
                           items: scheduleTypes,
                           label: "定时任务类型"
                         }, null, 8, ["modelValue"])
@@ -456,7 +361,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_VCronField, {
                               modelValue: config.interval_cron,
-                              "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((config.interval_cron) = $event)),
+                              "onUpdate:modelValue": _cache[11] || (_cache[11] = $event => ((config.interval_cron) = $event)),
                               label: "计划任务设置 CRON表达式",
                               hint: "设置日志清理的执行周期，如：5 4 * * * (每天凌晨4:05)",
                               "persistent-hint": "",
@@ -475,7 +380,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_text_field, {
                               modelValue: config.interval_time,
-                              "onUpdate:modelValue": _cache[16] || (_cache[16] = $event => ((config.interval_time) = $event)),
+                              "onUpdate:modelValue": _cache[12] || (_cache[12] = $event => ((config.interval_time) = $event)),
                               modelModifiers: { number: true },
                               label: "固定间隔",
                               type: "number",
@@ -494,7 +399,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_select, {
                               modelValue: config.interval_unit,
-                              "onUpdate:modelValue": _cache[17] || (_cache[17] = $event => ((config.interval_unit) = $event)),
+                              "onUpdate:modelValue": _cache[13] || (_cache[13] = $event => ((config.interval_unit) = $event)),
                               items: intervalUnits,
                               label: "单位",
                               density: "compact"
@@ -515,7 +420,7 @@ return (_ctx, _cache) => {
                           type: "info",
                           variant: "tonal"
                         }, {
-                          default: _withCtx(() => [...(_cache[23] || (_cache[23] = [
+                          default: _withCtx(() => [...(_cache[18] || (_cache[18] = [
                             _createTextVNode(" 以下为 tracker 映射规则，您可以根据需要修改或添加新的规则。 ", -1)
                           ]))]),
                           _: 1
@@ -532,7 +437,7 @@ return (_ctx, _cache) => {
                       default: _withCtx(() => [
                         _createVNode(_component_v_textarea, {
                           modelValue: config.tracker_mappings_str,
-                          "onUpdate:modelValue": _cache[18] || (_cache[18] = $event => ((config.tracker_mappings_str) = $event)),
+                          "onUpdate:modelValue": _cache[14] || (_cache[14] = $event => ((config.tracker_mappings_str) = $event)),
                           label: "Tracker域名映射规则",
                           rows: "6",
                           "auto-grow": "",
@@ -586,7 +491,7 @@ return (_ctx, _cache) => {
                           default: _withCtx(() => [
                             _createVNode(_component_v_textarea, {
                               modelValue: config.path_rename,
-                              "onUpdate:modelValue": _cache[19] || (_cache[19] = $event => ((config.path_rename) = $event)),
+                              "onUpdate:modelValue": _cache[15] || (_cache[15] = $event => ((config.path_rename) = $event)),
                               label: "按路径自定义分类",
                               hint: "每一行一个配置，中间以#分隔：路径#分类名称",
                               "persistent-hint": "",
@@ -612,7 +517,7 @@ return (_ctx, _cache) => {
               color: "secondary",
               onClick: resetForm
             }, {
-              default: _withCtx(() => [...(_cache[26] || (_cache[26] = [
+              default: _withCtx(() => [...(_cache[20] || (_cache[20] = [
                 _createTextVNode("重置", -1)
               ]))]),
               _: 1
@@ -623,7 +528,7 @@ return (_ctx, _cache) => {
                   color: "warning",
                   onClick: resetCategories
                 }, {
-                  default: _withCtx(() => [...(_cache[27] || (_cache[27] = [
+                  default: _withCtx(() => [...(_cache[21] || (_cache[21] = [
                     _createTextVNode("重置二级分类", -1)
                   ]))]),
                   _: 1
@@ -636,7 +541,7 @@ return (_ctx, _cache) => {
               loading: saving.value,
               onClick: saveConfig
             }, {
-              default: _withCtx(() => [...(_cache[28] || (_cache[28] = [
+              default: _withCtx(() => [...(_cache[22] || (_cache[22] = [
                 _createTextVNode("保存配置", -1)
               ]))]),
               _: 1

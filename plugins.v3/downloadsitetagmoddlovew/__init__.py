@@ -22,27 +22,6 @@ from app.sdk.plugin import _PluginBase
 from app.sdk.services import DownloaderHelper
 from app.sdk.utilities import StringUtils
 
-try:
-    from .episode_tags import (
-        build_episode_tags,
-        episode_format,
-        episodes_from_file_names,
-        is_episode_tag,
-        known_episode_prefixes,
-        normalize_episodes,
-        parse_episodes_from_title,
-    )
-except ImportError:  # 兼容按顶层模块加载的宿主
-    from episode_tags import (  # type: ignore
-        build_episode_tags,
-        episode_format,
-        episodes_from_file_names,
-        is_episode_tag,
-        known_episode_prefixes,
-        normalize_episodes,
-        parse_episodes_from_title,
-    )
-
 
 class DownloadSiteTagModdlovew(_PluginBase):
     # 插件名称
@@ -52,7 +31,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "2.0.10"
+    plugin_version = "2.0.11"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -109,11 +88,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
     _tracker_mappings_str = ""
     _tracker_mappings = {}
     _del_tags_task_rid = {}
-    # 集数标签：下载时按种子标题解析集数并打标签
-    _enable_episode_tag = True
-    _episode_tag_prefix = "E"
-    _episode_merge_threshold = 2
-    _episode_merge_separator = "-"
 
     def init_plugin(self, config: dict = None):
         self.downloadhistory_oper = DownloadHistoryOper()
@@ -158,17 +132,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
             logger.debug(f"all_cat_rename:{self._all_cat_rename}")
             self._rename_type = config.get("rename_type", False) #False按二级分类 True按路径分类
             self._path_rename = config.get("path_rename", None)
-            self._enable_episode_tag = bool(config.get("enable_episode_tag", True))
-            self._episode_tag_prefix = str(config.get("episode_tag_prefix") or "").strip() or "E"
-            try:
-                self._episode_merge_threshold = int(config.get("episode_merge_threshold", 2))
-            except (TypeError, ValueError):
-                self._episode_merge_threshold = 2
-            # 分隔符可空，需区分「未配置」与「显式置空」
-            self._episode_merge_separator = (
-                str(config.get("episode_merge_separator") or "")
-                if "episode_merge_separator" in config else "-"
-            )
 
             # 此设置对于老用户来说缺乏具体说明，因此如果为空，表示用户首次更新，则使用默认配置起到提示作用
             if not ("tracker_mappings_str" in config):
@@ -214,9 +177,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
         # 停止现有任务
         self.stop_service()
 
-        # 集数标签格式变化后自动全量刷新存量标签（含旧格式迁移）
-        self.__check_episode_format_changed()
-
         if self._onlyonce:
             # 创建定时任务控制器
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
@@ -257,11 +217,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
             "name": self.plugin_name,
             "catprefix": self._catprefix,
             "siteprefix": self._siteprefix,
-            "tracker_mappings_str": self._tracker_mappings_default,
-            "enable_episode_tag": self._enable_episode_tag,
-            "episode_tag_prefix": self._episode_tag_prefix,
-            "episode_merge_threshold": self._episode_merge_threshold,
-            "episode_merge_separator": self._episode_merge_separator,
+            "tracker_mappings_str": self._tracker_mappings_default
         }
 
     def load_config(self, config: dict):
@@ -285,11 +241,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
                     "path_rename",
                     "catprefix",
                     "siteprefix",
-                    "tracker_mappings_str",
-                    "enable_episode_tag",
-                    "episode_tag_prefix",
-                    "episode_merge_threshold",
-                    "episode_merge_separator",
+                    "tracker_mappings_str"
             ):
                 setattr(self, f"_{key}", config.get(key, getattr(self, f"_{key}")))
 
@@ -326,11 +278,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
             "name": self.plugin_name,
             "catprefix": self._catprefix,
             "siteprefix": self._siteprefix,
-            "tracker_mappings_str": self._tracker_mappings_str,
-            "enable_episode_tag": self._enable_episode_tag,
-            "episode_tag_prefix": self._episode_tag_prefix,
-            "episode_merge_threshold": self._episode_merge_threshold,
-            "episode_merge_separator": self._episode_merge_separator,
+            "tracker_mappings_str": self._tracker_mappings_str
         }
 
     def _get_status(self) -> Dict[str, Any]:
@@ -357,12 +305,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 "剧名标签": bool(self._enable_media_tag),
                 "自动分类": bool(self._enable_category),
                 "清理未使用标签": bool(self._enable_del_tags),
-                "集数标签": bool(self._enable_episode_tag),
-            },
-            "episode_tag": {
-                "prefix": self._episode_tag_prefix,
-                "threshold": self._episode_merge_threshold,
-                "separator": self._episode_merge_separator,
             },
             "downloaders": downloaders,
             "selected_downloaders": [str(item) for item in selected],
@@ -386,312 +328,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
         return {
             "all_cat_rename": self._all_cat_rename,
             "all_cat": self._all_cat,
-        }
-
-    # ------------------------------------------------------------------
-    # 集数标签
-    # ------------------------------------------------------------------
-    def __episode_format(self) -> Dict[str, Any]:
-        return episode_format(
-            enabled=self._enable_episode_tag,
-            prefix=self._episode_tag_prefix,
-            threshold=self._episode_merge_threshold,
-            separator=self._episode_merge_separator,
-        )
-
-    def __episode_prefixes(self, extra: Any = None) -> List[str]:
-        """需要识别并清理的集数标签前缀：当前 + 上次 + 常见前缀。"""
-        saved = self.get_data('episode_tag_format')
-        previous = saved.get('prefix') if isinstance(saved, dict) else None
-        prefixes = known_episode_prefixes(self._episode_tag_prefix, previous)
-        if extra:
-            items = extra if isinstance(extra, (list, tuple, set)) else [extra]
-            prefixes = sorted(
-                set(prefixes) | {str(item).strip() for item in items if str(item).strip()},
-                key=len,
-                reverse=True,
-            )
-        return prefixes
-
-    def __check_episode_format_changed(self):
-        """格式配置变化后自动全量刷新存量标签，并迁移旧前缀/旧格式标签。"""
-        current = self.__episode_format()
-        saved = self.get_data('episode_tag_format')
-        if isinstance(saved, dict) and saved == current:
-            return
-        previous_prefix = saved.get('prefix') if isinstance(saved, dict) else None
-        self.save_data('episode_tag_format', current)
-        # 首次启用只记录基线，不自动扫描；历史补全交给数据页按钮
-        if not isinstance(saved, dict) or not current['enabled']:
-            return
-        logger.info(f"{self.LOG_TAG}集数标签格式变化，自动全量刷新存量标签：{saved} -> {current}")
-        self.__schedule_episode_refresh(
-            extra_prefixes=[previous_prefix] if previous_prefix else []
-        )
-
-    def __schedule_episode_refresh(self, extra_prefixes: Any = None):
-        """后台线程执行，避免阻塞 init_plugin / HTTP 请求。"""
-        def runner():
-            try:
-                result = self._refresh_episode_tags(extra_prefixes=extra_prefixes or [])
-                logger.info(f"{self.LOG_TAG}集数标签全量刷新完成：{result}")
-            except Exception as err:
-                logger.error(f"{self.LOG_TAG}集数标签全量刷新失败：{str(err)}")
-
-        threading.Thread(target=runner, daemon=True, name="episode-tag-refresh").start()
-
-    def refresh_episode_tags(self) -> Dict[str, Any]:
-        """数据页「补全集数标签」：一次性补全并迁移全部存量标签。"""
-        if not self._enable_episode_tag:
-            return {"success": False, "message": "集数标签功能未启用"}
-        self.__schedule_episode_refresh()
-        return {"success": True, "message": "已开始补全集数标签，结果请查看插件日志"}
-
-    def __episode_tags_for(self, title: str) -> List[str]:
-        """由种子标题解析集数并按当前格式生成标签。"""
-        episodes: List[int] = []
-        try:
-            meta = MetaInfo(str(title or ''))
-            episodes = normalize_episodes(getattr(meta, 'episode_list', None) or [])
-        except Exception:
-            episodes = []
-        if not episodes:
-            episodes = parse_episodes_from_title(title)
-        return build_episode_tags(
-            episodes,
-            prefix=self._episode_tag_prefix,
-            threshold=self._episode_merge_threshold,
-            separator=self._episode_merge_separator,
-        )
-
-    def _torrent_title(self, torrent: Any, _hash: str, service: ServiceInfo) -> str:
-        """取种子原始标题。
-
-        qBittorrent 返回的是 dict-like 对象（_get_hash/_get_label 都用 .get），
-        Transmission 返回属性对象，DownloadAdded 的 context.torrent_info 又是
-        另一种 schema，三种取法都要支持，否则全量刷新会拿不到标题、解析不出集数。
-        """
-        getter = getattr(torrent, 'get', None)
-        for attr in ("name", "title", "torrent_name", "description"):
-            values = []
-            if callable(getter):
-                try:
-                    values.append(getter(attr))
-                except Exception:
-                    pass
-            values.append(getattr(torrent, attr, None))
-            for value in values:
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-        if getattr(service, "type", "") == "qbittorrent" and service.instance:
-            try:
-                name = self.get_torrent_name_by_hash(_hash, service.instance)
-                if name:
-                    return str(name)
-            except Exception:
-                pass
-            try:
-                found, error = service.instance.get_torrents(ids=_hash)
-                if not error and found:
-                    item = found[0]
-                    value = item.get('name') if callable(getattr(item, 'get', None)) else None
-                    if not value:
-                        value = getattr(item, 'name', None)
-                    if isinstance(value, str) and value.strip():
-                        return value.strip()
-            except Exception:
-                pass
-        return ''
-
-    def __episode_numbers_from_files(self, _hash: str, service: ServiceInfo,
-                                     torrent: Any = None) -> List[int]:
-        """标题没有集数时，从下载历史/下载器文件列表汇总各集集数。
-
-        合集种子常命名为 S01.Complete，标题里没有集数，但内部文件名带
-        E01/E02；优先查本地下载历史（最快），查不到再问下载器。
-        """
-        names: List[str] = []
-        try:
-            records = self.downloadhistory_oper.get_files_by_hash(
-                download_hash=_hash) or []
-            for record in records:
-                path = (getattr(record, 'fullpath', None)
-                        or getattr(record, 'filepath', None))
-                if path:
-                    names.append(str(path))
-        except Exception as err:
-            logger.debug(f"{self.LOG_TAG}读取下载历史文件记录失败 {_hash}: {err}")
-        if names:
-            numbers = episodes_from_file_names(names)
-            if numbers:
-                return numbers
-        # 历史记录解析不出集数时，改用下载器的文件列表
-        names = []
-
-        downloader_obj = service.instance
-        if getattr(service, "type", "") == "qbittorrent" and downloader_obj is not None:
-            try:
-                qbc = getattr(downloader_obj, "qbc", None)
-                files = qbc.torrents_files(torrent_hash=_hash) if qbc else []
-                for item in files or []:
-                    value = (item.get('name') if callable(getattr(item, 'get', None))
-                             else getattr(item, 'name', None))
-                    if value:
-                        names.append(str(value))
-            except Exception as err:
-                logger.debug(f"{self.LOG_TAG}读取 qB 种子文件列表失败 {_hash}: {err}")
-        else:
-            try:
-                files = torrent.files() if torrent is not None else []
-                for item in files or []:
-                    value = (item.get('name') if callable(getattr(item, 'get', None))
-                             else getattr(item, 'name', None))
-                    if value:
-                        names.append(str(value))
-            except Exception as err:
-                logger.debug(f"{self.LOG_TAG}读取 TR 种子文件列表失败 {_hash}: {err}")
-        return episodes_from_file_names(names)
-
-    def __append_episode_tags(self, service: ServiceInfo, _hash: str,
-                              tags: List[str]):
-        """集数标签单独追加到站点/剧名标签之后。
-
-        主标签由 _set_torrent_info 写入，定时补全里还会经过 list(set(...))
-        去重打乱顺序；把集数标签混进同一次调用无法保证它排在最后。
-        等主标签写完再单独追加一次，qB 的追加语义会让集数标签落在末尾。
-        """
-        values = list(dict.fromkeys(str(tag) for tag in (tags or []) if str(tag)))
-        if not values or not service or not service.instance or not _hash:
-            return
-        try:
-            if service.type == "qbittorrent":
-                service.instance.set_torrents_tag(ids=_hash, tags=values)
-            else:
-                # Transmission 是覆盖式，必须把现有标签一起写回
-                current: List[str] = []
-                try:
-                    found, error = service.instance.get_torrents(ids=_hash)
-                    if not error and found:
-                        current = [str(tag) for tag in (
-                            self._get_label(torrent=found[0],
-                                            dl_type=service.type) or [])]
-                except Exception:
-                    current = []
-                service.instance.set_torrent_tag(
-                    ids=_hash, tags=list(dict.fromkeys(current + values)))
-            logger.info(f"{self.LOG_TAG}集数标签已追加：{_hash} {','.join(values)}")
-        except Exception as err:
-            logger.error(f"{self.LOG_TAG}追加集数标签失败 {_hash}: {str(err)}")
-
-    def _refresh_episode_tags(self, extra_prefixes: Any = None) -> Dict[str, Any]:
-        """遍历全部种子重算集数标签：清理旧格式，按当前配置重新打。"""
-        if not self._enable_episode_tag:
-            logger.warning(f"{self.LOG_TAG}集数标签功能未启用，跳过全量刷新")
-            return {'updated': 0, 'removed': 0, 'scanned': 0}
-        services = self.service_infos
-        if not services:
-            logger.warning(f"{self.LOG_TAG}未获取到已连接的下载器，跳过集数标签全量刷新")
-            return {'updated': 0, 'removed': 0, 'scanned': 0}
-        prefixes = self.__episode_prefixes(extra_prefixes)
-        logger.info(
-            f"{self.LOG_TAG}开始全量刷新集数标签：下载器 {len(services)} 个，"
-            f"前缀 {self._episode_tag_prefix}，阈值 {self._episode_merge_threshold}，"
-            f"分隔符 '{self._episode_merge_separator}'")
-        updated = 0
-        removed = 0
-        scanned = 0
-        no_title = 0
-        no_episode = 0
-        from_files = 0
-        file_lookup = 0
-        unparsed_samples: List[str] = []
-        for service in services.values():
-            downloader_obj = service.instance
-            if not downloader_obj:
-                continue
-            torrents, error = downloader_obj.get_torrents()
-            if error or not torrents:
-                logger.warning(
-                    f"{self.LOG_TAG}下载器 {service.name} 未返回种子"
-                    f"（error={bool(error)}, count={len(torrents or [])})")
-                continue
-            logger.info(f"{self.LOG_TAG}下载器 {service.name} 扫描到 {len(torrents)} 个种子")
-            for torrent in torrents:
-                try:
-                    _hash = self._get_hash(torrent=torrent, dl_type=service.type)
-                    if not _hash:
-                        continue
-                    scanned += 1
-                    existing = [str(tag) for tag in
-                                (self._get_label(torrent=torrent, dl_type=service.type) or [])]
-                    title = self._torrent_title(torrent, _hash, service)
-                    if not title:
-                        no_title += 1
-                    wanted = self.__episode_tags_for(title)
-                    if not wanted:
-                        # 合集种子标题只有 S01.Complete，集数在内部文件名里
-                        file_lookup += 1
-                        numbers = self.__episode_numbers_from_files(
-                            _hash, service, torrent)
-                        if numbers:
-                            from_files += 1
-                            wanted = build_episode_tags(
-                                numbers,
-                                prefix=self._episode_tag_prefix,
-                                threshold=self._episode_merge_threshold,
-                                separator=self._episode_merge_separator)
-                        else:
-                            no_episode += 1
-                            if title and len(unparsed_samples) < 3:
-                                unparsed_samples.append(title[:120])
-                        if file_lookup % 200 == 0:
-                            logger.info(
-                                f"{self.LOG_TAG}集数标签补全进度：已查询 "
-                                f"{file_lookup} 个种子的文件列表，"
-                                f"其中 {from_files} 个解析出集数")
-                    stale = [tag for tag in existing
-                             if is_episode_tag(tag, prefixes) and tag not in wanted]
-                    missing = [tag for tag in wanted if tag not in existing]
-                    if not stale and not missing:
-                        continue
-                    if service.type == "qbittorrent":
-                        if stale:
-                            try:
-                                if getattr(downloader_obj, "qbc", None):
-                                    downloader_obj.qbc.torrents_removeTags(
-                                        hashes=_hash, tags=stale)
-                                else:
-                                    downloader_obj.delete_torrents_tag(
-                                        ids=_hash, tag=stale)
-                                removed += len(stale)
-                            except Exception as err:
-                                logger.warning(
-                                    f"{self.LOG_TAG}清理旧集数标签失败 {_hash}: {err}")
-                        if missing:
-                            self._set_torrent_info(service=service, _hash=_hash,
-                                                   _torrent=torrent, _tags=missing)
-                            updated += 1
-                    else:
-                        # Transmission 的标签写入是覆盖式，重设完整列表即可完成迁移
-                        final_tags = [tag for tag in existing
-                                      if tag not in stale] + missing
-                        downloader_obj.set_torrent_tag(ids=_hash, tags=final_tags)
-                        removed += len(stale)
-                        if missing:
-                            updated += 1
-                except Exception as err:
-                    logger.error(f"{self.LOG_TAG}刷新集数标签异常：{str(err)}")
-        if unparsed_samples:
-            logger.warning(
-                f"{self.LOG_TAG}以下种子在标题和文件列表中均未能解析出集数："
-                + ' | '.join(unparsed_samples))
-        return {
-            'updated': updated,
-            'removed': removed,
-            'scanned': scanned,
-            'no_title': no_title,
-            'no_episode': no_episode,
-            'from_files': from_files,
         }
 
     @property
@@ -753,13 +389,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 "methods": ["POST"],
                 "auth": "bear",
                 "summary": "重置二级分类"
-            },
-            {
-                "path": "/refresh_episode_tags",
-                "endpoint": self.refresh_episode_tags,
-                "methods": ["GET"],
-                "auth": "bear",
-                "summary": "一次性补全并迁移全部集数标签"
             }
         ]
 
@@ -992,13 +621,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         else:
                             logger.error(f"识别媒体信息成功,媒体标题标签: {media_info.title} 种子名称：{torrent_name}")
                             _tags.append(media_info.title)
-                    # 集数标签单独收集，避免被下面 set() 去重打乱写入顺序
-                    episode_tags: List[str] = []
-                    if self._enable_episode_tag:
-                        episode_title = self._torrent_title(torrent, _hash, service)
-                        episode_tags = [tag for tag in
-                                        self.__episode_tags_for(episode_title)
-                                        if tag not in torrent_tags]
                     # 分类, 如果勾选开关的话 <tr暂不支持> 因允许mtype为空时运行到此, 因此需要判断mtype不为空。为防止不必要的识别, 种子已经存在分类torrent_cat时 也不执行
                     if service.type == "qbittorrent" and self._enable_category and not torrent_cat and history.type and not self._rename_type:
                         logger.debug(f'按二级分类开始')
@@ -1044,13 +666,12 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         _cat = None
                     # 判断当前种子是否不需要修改(含需要清理的随机临时标签时仍需执行)
                     _has_random = any(self._is_random_temp_tag(t) for t in torrent_tags)
-                    if not _cat and not _tags and not _has_random and not episode_tags:
+                    if not _cat and not _tags and not _has_random:
                         logger.debug(f"当前种子不需要修改跳过 history.title:{history.title} torrent_cat:{torrent_cat} history.type:{history.type}")
                         continue
                     # 执行通用方法, 设置种子标签与分类
                     self._set_torrent_info(service=service, _hash=_hash, _torrent=torrent, _tags=_tags, _cat=_cat,
                                            _original_tags=torrent_tags)
-                    self.__append_episode_tags(service, _hash, episode_tags)
                 except Exception as e:
                     logger.error(
                         f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}", exc_info=True)
@@ -1370,22 +991,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
             # 媒体标题标签, 如果勾选开关的话
             if self._enable_media_tag and _media.title:
                 _tags.append(_media.title)
-            # 集数标签单独收集，等站点/剧名标签写完后再追加，保证排在最后
-            episode_tags: List[str] = []
-            if self._enable_episode_tag:
-                episode_title = self._torrent_title(_torrent, _hash, service)
-                if not episode_title:
-                    episode_title = str(getattr(_media, 'title', '') or '')
-                episode_tags = self.__episode_tags_for(episode_title)
-                if not episode_tags:
-                    # 标题解析不出集数时，再试媒体信息里已识别好的集数列表
-                    numbers = normalize_episodes(getattr(_media, 'episode_list', None) or [])
-                    if numbers:
-                        episode_tags = build_episode_tags(
-                            numbers,
-                            prefix=self._episode_tag_prefix,
-                            threshold=self._episode_merge_threshold,
-                            separator=self._episode_merge_separator)
             # 分类, 如果勾选开关的话 <tr暂不支持>
             logger.debug(f'_media.type:{_media.type}')
             if self._enable_category and _media.type and not self._rename_type:
@@ -1416,12 +1021,9 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 history: DownloadHistory = self.downloadhistory_oper.get_by_hash(_hash)
                 if history is not None:
                     _cat = self.get_cat_rename_by_path(history.path)
-            if _hash and (_tags or _cat or episode_tags):
-                # 先写站点/剧名/分类，再单独追加集数标签
-                if _tags or _cat:
-                    self._set_torrent_info(service=service, _hash=_hash,
-                                           _tags=_tags, _cat=_cat)
-                self.__append_episode_tags(service, _hash, episode_tags)
+            if _hash and (_tags or _cat):
+                # 执行通用方法, 设置种子标签与分类
+                self._set_torrent_info(service=service, _hash=_hash, _tags=_tags, _cat=_cat)
         except Exception as e:
             logger.error(
                 f"{self.LOG_TAG}分析下载事件时发生了错误: {str(e)}", exc_info=True)
