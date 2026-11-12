@@ -52,7 +52,7 @@ class DownloadSiteTagModdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Youtube-dl_B.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "2.0.9"
+    plugin_version = "2.0.10"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -552,6 +552,37 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 logger.debug(f"{self.LOG_TAG}读取 TR 种子文件列表失败 {_hash}: {err}")
         return episodes_from_file_names(names)
 
+    def __append_episode_tags(self, service: ServiceInfo, _hash: str,
+                              tags: List[str]):
+        """集数标签单独追加到站点/剧名标签之后。
+
+        主标签由 _set_torrent_info 写入，定时补全里还会经过 list(set(...))
+        去重打乱顺序；把集数标签混进同一次调用无法保证它排在最后。
+        等主标签写完再单独追加一次，qB 的追加语义会让集数标签落在末尾。
+        """
+        values = list(dict.fromkeys(str(tag) for tag in (tags or []) if str(tag)))
+        if not values or not service or not service.instance or not _hash:
+            return
+        try:
+            if service.type == "qbittorrent":
+                service.instance.set_torrents_tag(ids=_hash, tags=values)
+            else:
+                # Transmission 是覆盖式，必须把现有标签一起写回
+                current: List[str] = []
+                try:
+                    found, error = service.instance.get_torrents(ids=_hash)
+                    if not error and found:
+                        current = [str(tag) for tag in (
+                            self._get_label(torrent=found[0],
+                                            dl_type=service.type) or [])]
+                except Exception:
+                    current = []
+                service.instance.set_torrent_tag(
+                    ids=_hash, tags=list(dict.fromkeys(current + values)))
+            logger.info(f"{self.LOG_TAG}集数标签已追加：{_hash} {','.join(values)}")
+        except Exception as err:
+            logger.error(f"{self.LOG_TAG}追加集数标签失败 {_hash}: {str(err)}")
+
     def _refresh_episode_tags(self, extra_prefixes: Any = None) -> Dict[str, Any]:
         """遍历全部种子重算集数标签：清理旧格式，按当前配置重新打。"""
         if not self._enable_episode_tag:
@@ -961,10 +992,13 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         else:
                             logger.error(f"识别媒体信息成功,媒体标题标签: {media_info.title} 种子名称：{torrent_name}")
                             _tags.append(media_info.title)
-                    # 集数标签：定时/一次性补全历史时也一并补上
+                    # 集数标签单独收集，避免被下面 set() 去重打乱写入顺序
+                    episode_tags: List[str] = []
                     if self._enable_episode_tag:
                         episode_title = self._torrent_title(torrent, _hash, service)
-                        _tags.extend(self.__episode_tags_for(episode_title))
+                        episode_tags = [tag for tag in
+                                        self.__episode_tags_for(episode_title)
+                                        if tag not in torrent_tags]
                     # 分类, 如果勾选开关的话 <tr暂不支持> 因允许mtype为空时运行到此, 因此需要判断mtype不为空。为防止不必要的识别, 种子已经存在分类torrent_cat时 也不执行
                     if service.type == "qbittorrent" and self._enable_category and not torrent_cat and history.type and not self._rename_type:
                         logger.debug(f'按二级分类开始')
@@ -1010,12 +1044,13 @@ class DownloadSiteTagModdlovew(_PluginBase):
                         _cat = None
                     # 判断当前种子是否不需要修改(含需要清理的随机临时标签时仍需执行)
                     _has_random = any(self._is_random_temp_tag(t) for t in torrent_tags)
-                    if not _cat and not _tags and not _has_random:
+                    if not _cat and not _tags and not _has_random and not episode_tags:
                         logger.debug(f"当前种子不需要修改跳过 history.title:{history.title} torrent_cat:{torrent_cat} history.type:{history.type}")
                         continue
                     # 执行通用方法, 设置种子标签与分类
                     self._set_torrent_info(service=service, _hash=_hash, _torrent=torrent, _tags=_tags, _cat=_cat,
                                            _original_tags=torrent_tags)
+                    self.__append_episode_tags(service, _hash, episode_tags)
                 except Exception as e:
                     logger.error(
                         f"{self.LOG_TAG}分析种子信息时发生了错误: {str(e)}", exc_info=True)
@@ -1335,7 +1370,8 @@ class DownloadSiteTagModdlovew(_PluginBase):
             # 媒体标题标签, 如果勾选开关的话
             if self._enable_media_tag and _media.title:
                 _tags.append(_media.title)
-            # 集数标签：按种子标题解析集数，按当前前缀/阈值/分隔符生成
+            # 集数标签单独收集，等站点/剧名标签写完后再追加，保证排在最后
+            episode_tags: List[str] = []
             if self._enable_episode_tag:
                 episode_title = self._torrent_title(_torrent, _hash, service)
                 if not episode_title:
@@ -1350,7 +1386,6 @@ class DownloadSiteTagModdlovew(_PluginBase):
                             prefix=self._episode_tag_prefix,
                             threshold=self._episode_merge_threshold,
                             separator=self._episode_merge_separator)
-                _tags.extend(episode_tags)
             # 分类, 如果勾选开关的话 <tr暂不支持>
             logger.debug(f'_media.type:{_media.type}')
             if self._enable_category and _media.type and not self._rename_type:
@@ -1381,9 +1416,12 @@ class DownloadSiteTagModdlovew(_PluginBase):
                 history: DownloadHistory = self.downloadhistory_oper.get_by_hash(_hash)
                 if history is not None:
                     _cat = self.get_cat_rename_by_path(history.path)
-            if _hash and (_tags or _cat):
-                # 执行通用方法, 设置种子标签与分类
-                self._set_torrent_info(service=service, _hash=_hash, _tags=_tags, _cat=_cat)
+            if _hash and (_tags or _cat or episode_tags):
+                # 先写站点/剧名/分类，再单独追加集数标签
+                if _tags or _cat:
+                    self._set_torrent_info(service=service, _hash=_hash,
+                                           _tags=_tags, _cat=_cat)
+                self.__append_episode_tags(service, _hash, episode_tags)
         except Exception as e:
             logger.error(
                 f"{self.LOG_TAG}分析下载事件时发生了错误: {str(e)}", exc_info=True)
