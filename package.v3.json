@@ -152,5 +152,19 @@
       "v3.0.1": "统一导入面与索引元数据（插件基类改用 app.sdk.plugin 稳定入口）",
       "v3.0.0": "V3 专用版本（基于 thsrite MediaSyncDel 2.0.2）：修复删除季种合集最后一集时偶发 FileNotFoundError —— 空目录清理与下载器存在竞态，shutil.rmtree 改为容忍 FileNotFoundError，且清理异常不再中断后续删种、整理历史与通知；数据面板删除按钮插件 ID 由硬编码改为动态 self.__class__.__name__"
     }
+  },
+  "DirectoryStoragedlovew": {
+    "name": "目录存储 -dlovew",
+    "description": "按目录分别展示磁盘总量与已用空间，提供仪表盘小组件。",
+    "labels": "存储,仪表盘,目录,磁盘,容量",
+    "version": "1.0.0",
+    "icon": "directory_storage.png",
+    "author": "dlovew",
+    "level": 1,
+    "system_version": ">=3.0.0",
+    "release": true,
+    "history": {
+      "v1.0.0": "首个版本：读取宿主「目录」配置中的下载目录与媒体库目录，按每个目录分别采样所在磁盘分区的总量、已用、可用与使用率，提供「目录存储 · 列表」「目录存储 · 紧凑」两种仪表盘小组件；支持自定义补充路径、按物理磁盘合并同盘目录、告警阈值配色与定时刷新；vuetify 模式无需前端构建"
+    }
   }
 }

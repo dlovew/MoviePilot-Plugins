@@ -3,7 +3,7 @@
 **MoviePilot V3 自用插件仓库**
 
 ![兼容版本](https://img.shields.io/badge/MoviePilot-V3-8b949e?style=flat-square)
-![插件数量](https://img.shields.io/badge/plugins-5-8b949e?style=flat-square)
+![插件数量](https://img.shields.io/badge/plugins-7-8b949e?style=flat-square)
 ![作者](https://img.shields.io/badge/author-dlovew-8b949e?style=flat-square)
 [![最近提交](https://img.shields.io/github/last-commit/dlovew/MoviePilot-Plugins?style=flat-square&color=8b949e)](https://github.com/dlovew/MoviePilot-Plugins/commits/main)
 
@@ -24,6 +24,8 @@
 | 📡 | 自定义订阅番剧魔改版 -dlovew | 监听 RSS 自动订阅番剧；按流媒体平台分流：IQ+2160P 与 LINETV 走强订阅（带站点 / 制作组 / 特效 / 分辨率精细 include），其余仅通知。 | 官方 rssubscribe 2.1 |
 | 🔧 | qBittorrent 混合种子修复 -dlovew | 定时扫描 qBittorrent 中因 MoviePilot 拆包只下载合集最后一集而处于混合状态的种子，将其全部文件优先级恢复为正常。 | 原创自用 |
 | 🗑️ | 媒体文件同步删除 -dlovew | 根据媒体服务器删除事件同步清理整理历史、源文件和下载任务，支持辅种与合集种子处理。 | MediaSyncDel (thsrite) |
+| 🧹 | 清理无效做种 -dlovew | 清理已被站点删除的种子及源文件，支持 qBittorrent 和 Transmission。 | 原创自用 |
+| 💽 | 目录存储 -dlovew | 按目录分别展示磁盘总量、已用、可用与使用率，可添加为仪表盘小组件（列表 / 紧凑两种规格）。 | 原创自用 |
 
 > 命名规则：展示名追加 `-dlovew` 后缀，作者统一为 `dlovew`；插件 ID 与类名一致，目录名取全小写。
 
