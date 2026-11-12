@@ -27,7 +27,7 @@ class QbTorrentFixerdlovew(_PluginBase):
     # 插件图标
     plugin_icon = "Qbittorrent_A.png"
     # 插件版本，必须和 package.v3.json 中保持一致
-    plugin_version = "3.0.2"
+    plugin_version = "3.0.3"
     # 作者信息
     plugin_author = "dlovew"
     author_url = "https://github.com/dlovew"

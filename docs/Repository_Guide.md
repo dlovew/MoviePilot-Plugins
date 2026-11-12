@@ -88,7 +88,11 @@ MoviePilot-Plugins/
 - `.github/workflows/plugin-gate.yml`（所有指向 `main` 的 PR 与 push 到 `main`，不加 `paths` 过滤；PR 的 base 为 `origin/main`，push 为 `HEAD~1`）
 - `.github/workflows/release.yml`（push 到 `main` 且 `package.v3.json` 变更，或手动触发；base 为 `HEAD~1`）
 
-Release 工作流只处理 `package.v3.json` 中 `release: true` 的条目，从 `plugins.v3/<id小写>/` 打包，Tag 为 `<插件ID>_v<版本>`，资产为 `<id小写>_v<版本>.zip`；目录自上一个同名 Tag 无变化则跳过。当前 5 个插件都走源码目录安装，未启用 `release`，如要启用需先确认 ZIP 中包含 `dist/assets/` 且排除前端源码与依赖目录。
+Release 工作流只处理 `package.v3.json` 中 `release: true` 的条目，从 `plugins.v3/<id小写>/` 打包，Tag 为 `<插件ID>_v<版本>`，资产为 `<id小写>_v<版本>.zip`；目录自上一个同名 Tag 无变化则跳过。当前 6 个插件均已启用 `release`，ZIP 包含 `dist/assets/`（Vue 插件必需）并排除 `__pycache__`、`node_modules` 与前端源码 `src/`。
+
+宿主的「版本历史」弹窗把索引 `history` 与 GitHub Release 列表合并显示：只有存在对应 Release 的版本才会出现「安装」按钮，「当前」标记由后端对比本地 `plugin_version` 与 Release 版本得出。因此新增版本后必须让 Release 工作流成功发布，否则该版本只有说明文字、没有安装按钮。
+
+历史版本补发：在 GitHub Actions 手动运行 `Plugin Release`，勾选 `backfill`（可设 `max_per_plugin`，默认每插件 10 个）。脚本 `.github/scripts/backfill_releases.sh` 会遍历 `history`，从「索引中该插件版本等于目标版本」的 git 提交取代码快照打包；找不到 V3 快照的记录（如沿用 V2 说明）自动跳过，已存在的 Release 不会重建。该步骤默认不自动执行，避免一次性创建大量 Release。
 
 ## 7. 测试
 

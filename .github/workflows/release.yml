@@ -6,6 +6,15 @@ on:
     paths:
       - 'package.v3.json'
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: '为 history 中的历史版本批量补发 Release（宿主才会显示「安装」按钮）'
+        type: boolean
+        default: false
+      max_per_plugin:
+        description: '每个插件最多补发的历史版本数'
+        type: string
+        default: '10'
 
 permissions:
   contents: write
@@ -105,3 +114,10 @@ jobs:
             gh release create "$tag" "$asset" --title "$tag" --notes "$release_notes" --latest --target "$GITHUB_SHA"
             echo "$tag" >> processed_tags.txt
           done
+
+      - name: Backfill historical releases
+        if: github.event_name == 'workflow_dispatch' && inputs.backfill
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAX_PER_PLUGIN: ${{ inputs.max_per_plugin }}
+        run: bash .github/scripts/backfill_releases.sh
