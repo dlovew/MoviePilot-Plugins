@@ -2,8 +2,8 @@
 
 标签规则：
 - 前缀默认 ``E``，集数固定两位补零，如 ``E01``。
-- 连续集数分段，段长「超过」合并阈值时才合并成 ``E01-03``；
-  阈值 <= 1 表示完全不合并。
+- 连续集数分段，段长「达到」合并阈值即合并成 ``E01-02`` / ``E01-03``；
+  默认阈值 2，即大于 1 集的连续段都合并；阈值 <= 1 表示完全不合并。
 - 合并分隔符可为空（``E0103``）。
 """
 import re
@@ -16,6 +16,8 @@ _TITLE_PATTERNS = (
         re.IGNORECASE,
     ),
     re.compile(r'第\s*(\d{1,4})\s*(?:[-~–—]\s*(\d{1,4}))?\s*[集话話]'),
+    # 字幕组常见的 [01] / [12] 写法；限制 1~3 位，避免误匹配 [1080p]
+    re.compile(r'\[(\d{1,3})\]'),
 )
 
 
@@ -42,7 +44,7 @@ def parse_episodes_from_title(title: Any) -> List[int]:
                 start = int(match.group(1))
             except (TypeError, ValueError):
                 continue
-            end_raw = match.group(2)
+            end_raw = match.group(2) if (match.lastindex or 0) >= 2 else None
             if end_raw:
                 try:
                     end = int(end_raw)
@@ -82,7 +84,7 @@ def build_episode_tags(episodes: Any, prefix: str = 'E', threshold: Any = 2,
 
     tags: List[str] = []
     for run in split_runs(normalize_episodes(episodes)):
-        if merge_enabled and len(run) > merge_threshold:
+        if merge_enabled and len(run) >= merge_threshold:
             tags.append(f"{prefix}{run[0]:02d}{sep}{run[-1]:02d}")
         else:
             tags.extend(f"{prefix}{number:02d}" for number in run)

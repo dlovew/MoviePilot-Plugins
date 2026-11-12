@@ -171,7 +171,7 @@ async function resetCategories() {
                 label="合并阈值"
                 type="number"
                 min="0"
-                hint="连续集数超过阈值才合并；<= 1 不合并"
+                hint="连续集数达到阈值即合并；默认 2 = 大于 1 集就合并；<= 1 不合并"
                 persistent-hint
               />
             </v-col>
@@ -186,7 +186,7 @@ async function resetCategories() {
             </v-col>
             <v-col cols="12">
               <v-alert type="info" variant="tonal" density="compact">
-                默认前缀 E、阈值 2、分隔符 -：如 E01、E02；连续 3 集及以上合并为 E01-03。
+                默认前缀 E、阈值 2、分隔符 -：单集为 E01；连续 2 集合并为 E01-02，3 集为 E01-03。
                 修改任意格式配置并保存后，会自动全量刷新存量标签并迁移旧格式标签；
                 也可在数据页点「补全集数标签」手动执行。
               </v-alert>

@@ -36,6 +36,7 @@ def test_parse_episodes_from_title(logic):
     ) == [1, 2, 3]
     assert logic.parse_episodes_from_title("[某某] EP05 1080p") == [5]
     assert logic.parse_episodes_from_title("第01-02集") == [1, 2]
+    assert logic.parse_episodes_from_title("[字幕组] 番剧名 [05] [1080p]") == [5]
     assert logic.parse_episodes_from_title("Movie.2026.2160p") == []
 
 
@@ -44,9 +45,9 @@ def test_split_runs(logic):
 
 
 def test_build_episode_tags_default_threshold(logic):
-    # 阈值 2：连续 3 集才合并；连续 2 集仍分别打标签
+    # 阈值 2：大于 1 集的连续段都合并
+    assert logic.build_episode_tags([1, 2]) == ["E01-02"]
     assert logic.build_episode_tags([1, 2, 3]) == ["E01-03"]
-    assert logic.build_episode_tags([1, 2]) == ["E01", "E02"]
     assert logic.build_episode_tags([1]) == ["E01"]
     assert logic.build_episode_tags([1, 2, 3, 7, 8, 9, 10]) == [
         "E01-03", "E07-10"
@@ -61,6 +62,9 @@ def test_build_episode_tags_threshold_and_separator(logic):
     assert logic.build_episode_tags([1, 2, 3], threshold=0) == [
         "E01", "E02", "E03"
     ]
+    # 阈值 3：3 集起合并，2 集仍分别打
+    assert logic.build_episode_tags([1, 2, 3], threshold=3) == ["E01-03"]
+    assert logic.build_episode_tags([1, 2], threshold=3) == ["E01", "E02"]
     # 前缀与分隔符可配，分隔符可为空
     assert logic.build_episode_tags([1, 2, 3], prefix="EP", separator="~") == [
         "EP01~03"
