@@ -169,15 +169,16 @@
   },
   "IYUUAutoSeeddlovew": {
     "name": "IYUU自动辅种 -dlovew",
-    "description": "基于IYUU官方Api实现自动辅种，取种直链失效时自动处理验证页并重试。",
+    "description": "基于IYUU官方Api实现自动辅种，修复站点API拒绝浏览器UA导致的取种失败。",
     "labels": "IYUU,辅种,站点,下载器",
-    "version": "3.0.1",
+    "version": "3.0.2",
     "icon": "IYUU.png",
     "author": "dlovew",
     "level": 2,
     "system_version": ">=3.0.0",
     "release": true,
     "history": {
+      "v3.0.2": "修复 API Key 辅种失败根因：高清杜比等站点的种子检索接口拒绝浏览器 UA（返回 405 / Browser access is blocked!），插件原先携带站点配置的浏览器 UA 导致取不到 downhash、退化为 uid 直链并返回 HTML；所有携带 apikey 的接口调用改用非浏览器 UA，并输出接口错误码与消息；撤销 3.0.1 的确认页/详情页兜底，恢复原有 API 取凭证直链下载方式",
       "v3.0.1": "修复无站点 Cookie 且开启二级验证的站点（如高清杜比）：不再依赖详情页取种，改为解析直链返回的确认/验证页，自动提交同源同路径表单或跟随带令牌链接换取种子；详情页回退仅在配置了 Cookie 时启用；验证页无法自动处理时输出页面标题便于定位",
       "v3.0.0": "从官方 V2 插件迁移到 V3：导入面切换到 app.sdk.*，服务 ID 改用当前插件类名，通知类型改为 MessageType；修复直链取种返回 HTML 提示页导致 bencode 解析失败（Unable to interpret ` ` char.）的问题，先按详情页解析真实下载链接重试；失败缓存区分可重试与永久失效，仅 404/not found 永久缓存，避免有效种子被误判；同时兼容主程序种子下载失败原因输出与日志规范"
     }

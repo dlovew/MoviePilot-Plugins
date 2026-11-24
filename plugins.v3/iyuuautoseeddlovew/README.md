@@ -1,9 +1,10 @@
 # IYUU自动辅种 -dlovew（V3）
 
-基于官方 V2 `iyuuautoseed` 迁移到 MoviePilot V3，并修复取种链接失效场景：
+基于官方 V2 `iyuuautoseed` 迁移到 MoviePilot V3，并修复 API Key 辅种失败：
 
-- 直链（如 IYUU 模板拼出的 `download.php?id=...&uid=...`）下载到的内容不是种子文件时，先按确认/二级验证页处理：自动提交同源同路径的表单，或跟随页面里带令牌的下载链接，无需站点 Cookie，避免 `种子内容解析失败：Unable to interpret \` \` char.` 导致辅种失败。
-- 只有站点配置了 Cookie 才会再回退到详情页取种；无 Cookie 的站点不会发出注定失败的详情页请求。验证页无法自动通过时，日志会输出页面标题便于定位。
+- 部分站点（如高清杜比）的种子检索接口会拒绝浏览器 UA，返回 `405 Browser access is blocked!`。插件原先携带站点配置的浏览器 UA 调用 `/api/v1/torrent/search`，拿不到 `downhash`，只能退化为 `uid` 直链，下载到 HTML 页面后出现 `种子内容解析失败：Unable to interpret \` \` char.`。
+- 现在所有携带 `apikey` 的接口调用统一使用非浏览器 UA；站点配置了非浏览器 UA 时继续沿用。取种方式不变：仍由 API 换取下载凭证，再用 `downhash` 直链下载种子。
+- 接口返回错误时会输出状态码与错误文案，便于定位鉴权/UA/限流问题。
 - 失败缓存区分「可重试」与「永久失效」，只有明确返回 404 / not found 才永久缓存，其余情况下一轮任务仍会重试。
 - 导入面统一迁移到 `app.sdk.*`，服务 ID 使用当前插件类名，避免与官方插件冲突。
 
