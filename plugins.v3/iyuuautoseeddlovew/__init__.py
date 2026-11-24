@@ -29,11 +29,11 @@ class IYUUAutoSeeddlovew(_PluginBase):
     # 插件名称
     plugin_name = "IYUU自动辅种 -dlovew"
     # 插件描述
-    plugin_desc = "基于IYUU官方Api实现自动辅种，取种直链失效时自动回退详情页取种。"
+    plugin_desc = "基于IYUU官方Api实现自动辅种，取种直链失效时自动处理验证页并重试。"
     # 插件图标
     plugin_icon = "IYUU.png"
     # 插件版本
-    plugin_version = "3.0.0"
+    plugin_version = "3.0.1"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -1248,11 +1248,11 @@ class IYUUAutoSeeddlovew(_PluginBase):
     def __fetch_torrent_content(self, seed: dict, site: dict, url: str,
                                 use_cookie: bool) -> Tuple[Optional[bytes], str, str]:
         """
-        下载种子内容，直链失败时回退详情页取种。
+        下载种子内容：直链 -> 验证/确认页自动提交 -> 详情页（仅在有 Cookie 时）。
 
-        部分站点的 IYUU 直链（如仅带 uid 的 download.php）会返回 HTML 提示页，
-        主程序按 bencode 解析时报“Unable to interpret ` ` char.”，此时改用详情页
-        解析出的带签名链接重试，避免把仍有效的种子误判为永久失败。
+        部分站点（如高清杜比）没有配置 Cookie 且开启二级验证，IYUU 直链返回的是
+        确认页而不是种子，主程序按 bencode 解析时报“Unable to interpret ` ` char.”。
+        这里直接解析确认页并在同源同路径内提交表单，不依赖站点 Cookie。
 
         :return: 种子内容、实际使用的下载链接、错误信息
         """
@@ -1274,14 +1274,132 @@ class IYUUAutoSeeddlovew(_PluginBase):
         if content:
             return content, used_url, error_msg
 
-        page_url = self.__get_torrent_url_from_page(seed=seed, site=site)
-        if not page_url or page_url.rstrip("/") == url.rstrip("/"):
-            return None, used_url, error_msg
-        logger.info(f"{site.get('name')} 直链取种失败，改用详情页链接重试：{page_url}")
-        content, used_url, page_error = download(page_url)
+        # 二级验证/首次下载确认页：无需 Cookie，提交同源同路径表单换取种子
+        content = self.__resolve_download_confirmation(seed=seed, site=site, url=used_url,
+                                                       use_cookie=use_cookie)
         if content:
-            return content, used_url, page_error
-        return None, used_url, page_error or error_msg
+            logger.info(f"{site.get('name')} 已通过下载确认页取得种子：{used_url}")
+            return content, used_url, ""
+
+        # 详情页取种依赖站点 Cookie，没有 Cookie 时不做无效请求
+        if site.get("cookie"):
+            page_url = self.__get_torrent_url_from_page(seed=seed, site=site)
+            if page_url and page_url.rstrip("/") != url.rstrip("/"):
+                logger.info(f"{site.get('name')} 直链取种失败，改用详情页链接重试：{page_url}")
+                content, used_url, page_error = download(page_url)
+                if content:
+                    return content, used_url, page_error
+                error_msg = page_error or error_msg
+
+        return None, used_url, error_msg
+
+    def __resolve_download_confirmation(self, seed: dict, site: dict, url: str,
+                                        use_cookie: bool) -> Optional[bytes]:
+        """
+        解析下载直链返回的确认/二级验证页，提交同源同路径表单换取种子内容。
+
+        主程序只识别中文“下载种子文件”确认页，英文站点或带自有验证文案的页面会
+        被判为解析失败；这里不依赖页面文案，只按表单目标与控件名匹配。
+
+        :return: 种子二进制，未能自动确认时返回 None
+        """
+        request_kwargs = dict(
+            ua=site.get("ua") or settings.USER_AGENT,
+            cookies=site.get("cookie") if use_cookie else None,
+            proxies=settings.PROXY if site.get("proxy") else None,
+            referer=site.get("url"),
+        )
+        try:
+            response = RequestUtils(**request_kwargs).get_res(url=url)
+            if response is None or response.status_code != 200 or not response.content:
+                return None
+            if self.__is_torrent_content(response.content):
+                return response.content
+            html = etree.HTML(response.text)
+            if html is None:
+                return None
+            origin = urlparse(url)
+            for form in html.xpath("//form"):
+                action = (form.get("action") or "").strip()
+                target = url if action in ("", "?") else urljoin(url, action)
+                destination = urlparse(target)
+                if ((destination.scheme, destination.netloc) != (origin.scheme, origin.netloc)
+                        or destination.path != origin.path):
+                    continue
+                if (form.get("method") or "post").lower() != "post":
+                    continue
+                data = {}
+                controls = form.xpath(
+                    ".//input[@name and not(@disabled)] | "
+                    ".//select[@name and not(@disabled)] | "
+                    ".//textarea[@name and not(@disabled)]"
+                )
+                for element in controls:
+                    if (element.tag == "input"
+                            and (element.get("type") or "").lower() in ("checkbox", "radio")
+                            and element.get("checked") is None):
+                        continue
+                    value = element.get("value")
+                    if element.tag == "select" and value is None:
+                        options = element.xpath(".//option[@selected]/@value | .//option/@value")
+                        value = options[0] if options else ""
+                    data[element.get("name")] = value or ""
+                if not data:
+                    continue
+                result = RequestUtils(**request_kwargs).post_res(target, data=data)
+                if result is None or not result.content:
+                    continue
+                if self.__is_torrent_content(result.content):
+                    return result.content
+                # 部分站点确认后仍返回页面，再尝试页面里带凭证的直接链接
+                link = self.__torrent_link_from_html(result.text, target)
+                if link:
+                    fetched = RequestUtils(**request_kwargs).get_res(url=link)
+                    if fetched is not None and self.__is_torrent_content(fetched.content):
+                        return fetched.content
+            # 验证页只给出带令牌的链接时，直接跟随该链接
+            direct = self.__torrent_link_from_html(response.text, url)
+            if direct and direct.rstrip("/") != url.rstrip("/"):
+                fetched = RequestUtils(**request_kwargs).get_res(url=direct)
+                if fetched is not None and self.__is_torrent_content(fetched.content):
+                    return fetched.content
+            title = html.xpath("//title/text()")
+            logger.warning(
+                f"{site.get('name')} 种子 {seed.get('torrent_id')} 返回非种子内容且未能自动确认："
+                f"{url}，页面标题：{title[0].strip() if title else '未知'}"
+            )
+            return None
+        except Exception as err:
+            logger.warning(f"{site.get('name')} 处理下载确认页失败：{err}")
+            return None
+
+    @staticmethod
+    def __is_torrent_content(content: Any) -> bool:
+        """轻量判断响应体是否为 bencode 种子，避免把 HTML 交给下载器。"""
+        if not content:
+            return False
+        data = content if isinstance(content, bytes) else str(content).encode("utf-8")
+        return data.lstrip()[:1] == b"d" and b"4:info" in data
+
+    @staticmethod
+    def __torrent_link_from_html(text: str, base_url: str) -> Optional[str]:
+        """从确认结果页中找同源同路径的下载直链。"""
+        try:
+            html = etree.HTML(text)
+            if html is None:
+                return None
+            origin = urlparse(base_url)
+            for href in html.xpath("//a[@href]/@href"):
+                link = urljoin(base_url, href)
+                destination = urlparse(link)
+                if ((destination.scheme, destination.netloc) != (origin.scheme, origin.netloc)
+                        or destination.path != origin.path):
+                    continue
+                if "download.php" in destination.path or "id=" in destination.query:
+                    return link
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def __is_permanent_torrent_error(error_msg: Optional[str]) -> bool:
