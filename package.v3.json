@@ -166,5 +166,19 @@
     "history": {
       "v1.0.0": "首个版本：读取宿主「目录」配置中的下载目录与媒体库目录，按每个目录分别采样所在磁盘分区的总量、已用、可用与使用率，提供「目录存储 · 列表」「目录存储 · 紧凑」两种仪表盘小组件；支持自定义补充路径、按物理磁盘合并同盘目录、告警阈值配色与定时刷新；vuetify 模式无需前端构建"
     }
+  },
+  "IYUUAutoSeeddlovew": {
+    "name": "IYUU自动辅种 -dlovew",
+    "description": "基于IYUU官方Api实现自动辅种，取种直链失效时自动回退详情页取种。",
+    "labels": "IYUU,辅种,站点,下载器",
+    "version": "3.0.0",
+    "icon": "IYUU.png",
+    "author": "dlovew",
+    "level": 2,
+    "system_version": ">=3.0.0",
+    "release": true,
+    "history": {
+      "v3.0.0": "从官方 V2 插件迁移到 V3：导入面切换到 app.sdk.*，服务 ID 改用当前插件类名，通知类型改为 MessageType；修复直链取种返回 HTML 提示页导致 bencode 解析失败（Unable to interpret ` ` char.）的问题，先按详情页解析真实下载链接重试；失败缓存区分可重试与永久失效，仅 404/not found 永久缓存，避免有效种子被误判；同时兼容主程序种子下载失败原因输出与日志规范"
+    }
   }
 }
