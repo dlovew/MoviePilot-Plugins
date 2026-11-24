@@ -2,8 +2,8 @@
 
 基于官方 V2 `iyuuautoseed` 迁移到 MoviePilot V3，并修复 API Key 辅种失败：
 
-- 部分站点（如高清杜比）的种子检索接口会拒绝浏览器 UA，返回 `405 Browser access is blocked!`。插件原先携带站点配置的浏览器 UA 调用 `/api/v1/torrent/search`，拿不到 `downhash`，只能退化为 `uid` 直链，下载到 HTML 页面后出现 `种子内容解析失败：Unable to interpret \` \` char.`。
-- 现在所有携带 `apikey` 的接口调用统一使用非浏览器 UA；站点配置了非浏览器 UA 时继续沿用。取种方式不变：仍由 API 换取下载凭证，再用 `downhash` 直链下载种子。
+- 部分站点（如高清杜比）的 API 没有收到 User-Agent 时会返回 `405 Browser access is blocked!`。插件原先虽然给 `RequestUtils` 传了 `ua`，但同时传了 `headers`，而 `RequestUtils` 在有 `headers` 时会忽略 `ua` 参数，导致请求实际没有 UA，拿不到 `downhash`，只能退化为 `uid` 直链，下载到 HTML 页面后出现 `种子内容解析失败：Unable to interpret \` \` char.`。
+- 现在所有携带 `apikey` 的接口调用都把 `User-Agent` 直接写进 `headers`，无论站点是否配置 UA 都能正常取到 `downhash`。取种方式不变：仍由 API 换取下载凭证，再用 `downhash` 直链下载种子。
 - 接口返回错误时会输出状态码与错误文案，便于定位鉴权/UA/限流问题。
 - 失败缓存区分「可重试」与「永久失效」，只有明确返回 404 / not found 才永久缓存，其余情况下一轮任务仍会重试。
 - 导入面统一迁移到 `app.sdk.*`，服务 ID 使用当前插件类名，避免与官方插件冲突。

@@ -29,11 +29,11 @@ class IYUUAutoSeeddlovew(_PluginBase):
     # 插件名称
     plugin_name = "IYUU自动辅种 -dlovew"
     # 插件描述
-    plugin_desc = "基于IYUU官方Api实现自动辅种，修复站点API拒绝浏览器UA导致的取种失败。"
+    plugin_desc = "基于IYUU官方Api实现自动辅种，修复站点API缺少User-Agent导致的取种失败。"
     # 插件图标
     plugin_icon = "IYUU.png"
     # 插件版本
-    plugin_version = "3.0.2"
+    plugin_version = "3.0.3"
     # 插件作者
     plugin_author = "dlovew"
     # 作者主页
@@ -1351,10 +1351,11 @@ class IYUUAutoSeeddlovew(_PluginBase):
     @staticmethod
     def __api_user_agent(site: dict) -> str:
         """
-        站点 API 会拒绝浏览器 UA（如高清杜比返回 Browser access is blocked!）。
+        生成站点 API 请求使用的 User-Agent。
 
-        页面请求仍使用站点配置的 UA；只有携带 apikey 的接口调用改用非浏览器 UA。
-        站点配置了非浏览器 UA 时继续沿用。
+        高清杜比等站点的 API 没有 UA 时返回 405 / Browser access is blocked!，
+        而 RequestUtils 一旦传了 headers 就会忽略 ua 参数，所以必须把 UA 写进
+        headers。站点配置了非浏览器 UA 时继续沿用，否则使用插件标识。
         """
         ua = str(site.get("ua") or "").strip()
         if ua and not re.match(r"^(Mozilla|Opera|Chrome|Safari|Edge|Version)/", ua, re.IGNORECASE):
@@ -1461,10 +1462,10 @@ class IYUUAutoSeeddlovew(_PluginBase):
                 if api_base and api_base.rstrip("/").lower() not in [item.rstrip("/").lower() for item in api_bases]:
                     api_bases.append(api_base)
             for api_base in api_bases:
-                # 站点 API 拒绝浏览器 UA，API 调用必须使用非浏览器客户端标识
-                res = RequestUtils(ua=self.__api_user_agent(site),
-                                   headers={'Accept': 'application/json, text/plain, */*',
-                                            'x-api-key': apikey}
+                # RequestUtils 传 headers 时会忽略 ua 参数，UA 必须写进 headers
+                res = RequestUtils(headers={'Accept': 'application/json, text/plain, */*',
+                                            'x-api-key': apikey,
+                                            'User-Agent': self.__api_user_agent(site)}
                                    ).post_res(f"{api_base}/{path.lstrip('/')}", params={'id': tid})
                 if not res:
                     logger.warning(f"获取种子下载链接失败：{tid}（{api_base}）")
@@ -1694,9 +1695,10 @@ class IYUUAutoSeeddlovew(_PluginBase):
                 headers={
                     "x-api-key": apikey,
                     "Accept": "application/json",
-                    "Content-Type": "application/json"
-                },
-                ua=self.__api_user_agent(site)
+                    "Content-Type": "application/json",
+                    # RequestUtils 传 headers 时会忽略 ua 参数，UA 必须写进 headers
+                    "User-Agent": self.__api_user_agent(site)
+                }
             ).post_res(f"{site_url}/api/v1/torrent/search",
                        json={"keyword": keyword, "page_number": 0, "page_size": page_size, "visible": 1})
             if not res:
